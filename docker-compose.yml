@@ -1,0 +1,163 @@
+# Scrinium
+#
+# All services are under the "infra" profile. Start them with:
+#     docker compose --profile infra up -d
+#
+# Host ports:
+#   Kafka            localhost:9092
+#   Postgres (doc)   localhost:5432   (db: document)
+#   Postgres (proc)  localhost:5433   (db: processing)
+#   Redis            localhost:6379
+#   MinIO API        localhost:9000
+#   MinIO Console    localhost:9001   (minioadmin / minioadmin)
+#
+# In-cluster, services reach Kafka at kafka:29092.
+
+services:
+  # Apache Kafka 4.x — single-node KRaft (combined broker + controller).
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: scrinium-kafka
+    profiles: ["infra"]
+    ports:
+      - "9092:9092"            # EXTERNAL listener, for host-local apps
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Three listeners: CONTROLLER (KRaft metadata, internal only),
+      # INTERNAL (in-cluster, kafka:29092), EXTERNAL (host, localhost:9092).
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Single node: all replication factors are 1.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Fixed cluster ID; must stay constant to match the formatted volume.
+      # Generate one with: kafka-storage.sh random-uuid
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks:
+      - scrinium
+
+  # PostgreSQL 16 — document-service database.
+  postgres-document:
+    image: postgres:16
+    container_name: scrinium-postgres-document
+    profiles: ["infra"]
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: scrinium
+      POSTGRES_PASSWORD: scrinium
+      POSTGRES_DB: document
+    volumes:
+      - pg-document-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scrinium -d document"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scrinium
+
+  # PostgreSQL 16 — processing-service database (host port 5433).
+  postgres-processing:
+    image: postgres:16
+    container_name: scrinium-postgres-processing
+    profiles: ["infra"]
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: scrinium
+      POSTGRES_PASSWORD: scrinium
+      POSTGRES_DB: processing
+    volumes:
+      - pg-processing-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scrinium -d processing"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scrinium
+
+  # Redis 7 — live job status, cache, and rate-limit store.
+  redis:
+    image: redis:7
+    container_name: scrinium-redis
+    profiles: ["infra"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - scrinium
+
+  # MinIO — S3-compatible object storage for the files themselves.
+  minio:
+    image: minio/minio:latest
+    container_name: scrinium-minio
+    profiles: ["infra"]
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"            # S3 API
+      - "9001:9001"            # Web console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    networks:
+      - scrinium
+    # No healthcheck: the image is minimal (no curl/wget). The createbuckets
+    # job below doubles as the readiness signal.
+
+  # One-shot bucket initialization. Retries until MinIO is reachable, then
+  # creates the buckets and exits. Completion implies MinIO is ready.
+  createbuckets:
+    image: minio/mc:latest
+    container_name: scrinium-createbuckets
+    profiles: ["infra"]
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do
+        echo 'waiting for minio...'; sleep 2;
+      done;
+      mc mb --ignore-existing local/documents;
+      mc mb --ignore-existing local/thumbnails;
+      echo 'buckets ready: documents, thumbnails';
+      "
+    networks:
+      - scrinium
+
+volumes:
+  kafka-data:
+  pg-document-data:
+  pg-processing-data:
+  redis-data:
+  minio-data:
+
+networks:
+  scrinium:
+    name: scrinium

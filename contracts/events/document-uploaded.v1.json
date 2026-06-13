@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scrinium.dev/contracts/events/document-uploaded.v1.json",
+  "title": "DocumentUploaded",
+  "description": "Emitted by document-service once a document record has been persisted with status PENDING and is ready to be processed.",
+  "type": "object",
+  "required": ["id", "type", "version", "timestamp", "payload"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier of this event message. Consumers use it for idempotency."
+    },
+    "type": {
+      "type": "string",
+      "description": "Event type discriminator. Constant value: \"document.uploaded\"."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Schema major version. Matches the .vN suffix of this file."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event creation time as RFC 3339 / ISO-8601, in UTC."
+    },
+    "payload": {
+      "type": "object",
+      "title": "DocumentUploadedPayload",
+      "required": ["documentId", "fileName"],
+      "properties": {
+        "documentId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the document this event refers to."
+        },
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Original file name supplied at upload time."
+        }
+      }
+    }
+  }
+}

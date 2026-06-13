@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scrinium.dev/contracts/events/document-processing-completed.v1.json",
+  "title": "DocumentProcessingCompleted",
+  "description": "Emitted by processing-service after a document has been processed. In the Phase-1 walking skeleton processing is a no-op, so the payload carries only the document reference.",
+  "type": "object",
+  "required": ["id", "type", "version", "timestamp", "payload"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier of this event message. Consumers use it for idempotency."
+    },
+    "type": {
+      "type": "string",
+      "description": "Event type discriminator. Constant value: \"document.processing.completed\"."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Schema major version. Matches the .vN suffix of this file."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event creation time as RFC 3339 / ISO-8601, in UTC."
+    },
+    "payload": {
+      "type": "object",
+      "title": "DocumentProcessingCompletedPayload",
+      "required": ["documentId"],
+      "properties": {
+        "documentId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the document that finished processing."
+        }
+      }
+    }
+  }
+}

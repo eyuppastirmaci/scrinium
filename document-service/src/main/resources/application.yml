@@ -1,0 +1,21 @@
+spring:
+  mvc:
+    problemdetails:
+      enabled: true
+  application:
+    name: document-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/document
+    username: scrinium
+    password: scrinium
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
