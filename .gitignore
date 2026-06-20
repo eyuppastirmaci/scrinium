@@ -5,6 +5,10 @@ target/
 document-service/target/
 processing-service/target/
 
+# Node
+node_modules/
+dist/
+
 # IDE and OS noise
 .idea/
 .vscode/

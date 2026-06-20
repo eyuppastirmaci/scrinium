@@ -1,0 +1,1 @@
+{"root":["./src/main.ts","./src/api/client.ts","./src/api/documents.ts","./src/features/upload/types.ts","./src/utils/format.ts","./src/app.vue","./src/features/upload/dropzone.vue","./src/features/upload/filelist.vue","./src/features/upload/uploadprogress.vue","./src/pages/uploadpage.vue","./env.d.ts"],"version":"5.8.3"}

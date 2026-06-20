@@ -1,6 +1,7 @@
 package dev.scrinium.document.adapter.in.web;
 
 import dev.scrinium.document.adapter.in.web.config.UploadProperties;
+import dev.scrinium.document.common.FormatUtils;
 import dev.scrinium.document.domain.exception.TooManyFilesException;
 import dev.scrinium.document.domain.model.Document;
 import dev.scrinium.document.domain.model.DocumentDownload;
@@ -25,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -53,6 +55,16 @@ public class DocumentController {
         this.deleteDocument = deleteDocument;
         this.uploadProperties = uploadProperties;
         this.uploadRequestMapper = uploadRequestMapper;
+    }
+
+    @GetMapping("/upload-constraints")
+    public UploadConstraintsResponse uploadConstraints() {
+        return new UploadConstraintsResponse(
+                uploadProperties.supportedContentTypes(),
+                uploadProperties.maxFileSize().toBytes(),
+                FormatUtils.toMegabytes(uploadProperties.maxFileSize().toBytes()),
+                uploadProperties.maxFilesPerRequest()
+        );
     }
 
     @PostMapping(consumes = "multipart/form-data")
@@ -147,4 +159,10 @@ public class DocumentController {
             UUID id, String fileName, String contentType, long sizeBytes,
             String sha256, String status,
             OffsetDateTime createdAt, OffsetDateTime updatedAt) {}
+
+    public record UploadConstraintsResponse(
+            Set<String> supportedContentTypes,
+            long maxFileSize,
+            String maxFileSizeLabel,
+            int maxFilesPerRequest) {}
 }

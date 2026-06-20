@@ -26,6 +26,7 @@ spring:
 
 scrinium:
   upload:
+    max-file-size: 20MB
     max-files-per-request: 10
     supported-content-types:
       - application/pdf
