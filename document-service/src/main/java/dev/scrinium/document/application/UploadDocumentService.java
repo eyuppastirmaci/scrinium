@@ -1,5 +1,8 @@
 package dev.scrinium.document.application;
 
+import dev.scrinium.document.adapter.in.web.config.UploadProperties;
+import dev.scrinium.document.domain.exception.DuplicateDocumentException;
+import dev.scrinium.document.domain.exception.UnsupportedFileTypeException;
 import dev.scrinium.document.domain.model.Document;
 import dev.scrinium.document.domain.model.DocumentFile;
 import dev.scrinium.document.domain.model.StoredDocument;
@@ -16,14 +19,17 @@ import java.util.UUID;
 @Service
 public class UploadDocumentService implements UploadDocument {
 
+    private final UploadProperties uploadProperties;
     private final DocumentRepository repository;
     private final DocumentStorage storage;
     private final DocumentEventPublisher eventPublisher;
 
-    public UploadDocumentService(DocumentRepository repository,
+    public UploadDocumentService(UploadProperties uploadProperties,
+                                 DocumentRepository repository,
                                  DocumentStorage storage,
                                  DocumentEventPublisher eventPublisher
     ) {
+        this.uploadProperties = uploadProperties;
         this.repository = repository;
         this.storage = storage;
         this.eventPublisher = eventPublisher;
@@ -47,7 +53,15 @@ public class UploadDocumentService implements UploadDocument {
     @Override
     @Transactional
     public Document upload(Command command) {
+        // Reject unsupported file types before any storage or persistence work.
+        if (!uploadProperties.supportedContentTypes().contains(command.contentType())) {
+            throw new UnsupportedFileTypeException(command.contentType());
+        }
+
+        // Generate a unique identifier for the new document aggregate.
         UUID documentId = UUID.randomUUID();
+
+        // Stream the file to MinIO and compute its SHA-256 hash on the fly.
         StoredDocument storedDocument = storage.store(new DocumentFile(
                 documentId,
                 command.fileName(),
@@ -55,6 +69,12 @@ public class UploadDocumentService implements UploadDocument {
                 command.sizeBytes(),
                 command.content()
         ));
+
+        // Check whether a non-deleted document with the same content already exists.
+        repository.findBySha256(storedDocument.sha256())
+                .ifPresent(existing -> {
+                    throw new DuplicateDocumentException(existing.id());
+                });
 
         // Create an always-valid PENDING aggregate; invariants (e.g. non-blank fileName) are enforced in its constructor.
         Document document = Document.pending(

@@ -1,26 +1,49 @@
 mod adapter;
 mod application;
+mod config;
 mod contract;
 mod domain;
 
-use adapter::{KafkaEventPublisher, build_consumer};
+use adapter::{KafkaEventPublisher, SqlxProcessingJobRepository, build_consumer};
 use application::{HandleError, ProcessDocument};
+use config::AppConfig;
 use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::message::Message;
-
-const BROKERS: &str = "localhost:9092";
-const IN_TOPIC: &str = "document.uploaded";
-const GROUP_ID: &str = "processing-service";
+use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() {
-    // Composition root: build adapters and inject the publisher into the use-case.
-    let publisher = KafkaEventPublisher::new(BROKERS);
-    let use_case = ProcessDocument::new(&publisher);
+    let config = AppConfig::from_env();
 
-    let consumer = build_consumer(BROKERS, GROUP_ID);
-    consumer.subscribe(&[IN_TOPIC]).expect("subscribe failed");
-    println!("processing-service listening on '{IN_TOPIC}'");
+    // Connect to the processing-service database.
+    let db_pool = PgPoolOptions::new()
+        .max_connections(config.db_max_connections)
+        .connect(&config.database_url)
+        .await
+        .expect("processing database connection failed");
+    println!("processing-service connected to processing database");
+
+    // Run pending database migrations at startup.
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .expect("processing database migration failed");
+    println!("processing-service database migrations applied");
+
+    // Composition root: build adapters and inject into the use-case.
+    let publisher = KafkaEventPublisher::new(&config.kafka_brokers);
+    let repository = SqlxProcessingJobRepository::new(db_pool);
+    let use_case = ProcessDocument::new(&publisher, &repository);
+
+    // Subscribe to the inbound Kafka topic and start the consumer loop.
+    let consumer = build_consumer(&config.kafka_brokers, &config.kafka_group_id);
+    consumer
+        .subscribe(&[&config.kafka_in_topic])
+        .expect("subscribe failed");
+    println!(
+        "processing-service listening on '{}'",
+        config.kafka_in_topic
+    );
 
     loop {
         match consumer.recv().await {

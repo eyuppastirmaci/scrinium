@@ -2,6 +2,10 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
   application:
     name: document-service
   datasource:
@@ -21,6 +25,13 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 scrinium:
+  upload:
+    supported-content-types:
+      - application/pdf
+      - image/jpeg
+      - image/png
+      - image/webp
+      - image/tiff
   storage:
     endpoint: http://localhost:9000
     access-key: minioadmin

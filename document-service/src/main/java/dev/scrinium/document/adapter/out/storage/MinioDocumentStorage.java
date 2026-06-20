@@ -4,6 +4,7 @@ import dev.scrinium.document.adapter.out.storage.exception.DocumentStorageExcept
 import dev.scrinium.document.domain.model.DocumentFile;
 import dev.scrinium.document.domain.model.StoredDocument;
 import dev.scrinium.document.domain.port.out.DocumentStorage;
+import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,9 +37,11 @@ public class MinioDocumentStorage implements DocumentStorage {
         String objectKey = objectKeyFor(file);
 
         try (InputStream input = file.content()) {
+            // Wrap the input stream with a digest to compute the SHA-256 hash while streaming to MinIO.
             MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
             DigestInputStream digestInput = new DigestInputStream(input, digest);
 
+            // Stream the file content to MinIO; the hash is computed on the fly without buffering.
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(bucket)
                     .object(objectKey)
@@ -55,6 +58,19 @@ public class MinioDocumentStorage implements DocumentStorage {
             );
         } catch (Exception e) {
             throw new DocumentStorageException("Could not store document in MinIO", e);
+        }
+    }
+
+    @Override
+    public InputStream retrieve(String storageObjectKey) {
+        try {
+            // Stream the file content directly from MinIO without loading it into memory.
+            return minioClient.getObject(GetObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(storageObjectKey)
+                    .build());
+        } catch (Exception e) {
+            throw new DocumentStorageException("Could not retrieve document from MinIO", e);
         }
     }
 

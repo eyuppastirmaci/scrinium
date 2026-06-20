@@ -2,6 +2,8 @@ package dev.scrinium.document.adapter.out.messaging;
 
 import dev.scrinium.document.domain.model.Document;
 import dev.scrinium.document.domain.port.out.DocumentEventPublisher;
+import dev.scrinium.document.events.generated.DocumentDeleted;
+import dev.scrinium.document.events.generated.DocumentDeletedPayload;
 import dev.scrinium.document.events.generated.DocumentUploaded;
 import dev.scrinium.document.events.generated.DocumentUploadedPayload;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -14,9 +16,11 @@ import java.util.UUID;
 @Component
 public class KafkaDocumentEventPublisher implements DocumentEventPublisher {
 
-    private static final String TOPIC = "document.uploaded";
+    private static final String UPLOADED_TOPIC = "document.uploaded";
+    private static final String DELETED_TOPIC = "document.deleted";
 
-    private static final String EVENT_TYPE = "document.uploaded";
+    private static final String UPLOADED_EVENT_TYPE = "document.uploaded";
+    private static final String DELETED_EVENT_TYPE = "document.deleted";
     private static final long EVENT_VERSION = 1L;
 
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -53,7 +57,7 @@ public class KafkaDocumentEventPublisher implements DocumentEventPublisher {
                 // Unique per-message id, separate from the document id; used for consumer-side idempotency.
                 .withId(UUID.randomUUID())
                 // Type discriminator so polyglot consumers can route/filter the message.
-                .withType(EVENT_TYPE)
+                .withType(UPLOADED_EVENT_TYPE)
                 // Schema major version, letting consumers cope with future payload evolution.
                 .withVersion(EVENT_VERSION)
                 // Event creation time (offset-aware), serialized as ISO-8601 by Jackson 3.
@@ -73,6 +77,43 @@ public class KafkaDocumentEventPublisher implements DocumentEventPublisher {
         String json = jsonMapper.writeValueAsString(event);
 
         // Publish keyed by documentId so all events for one document keep their order across partitions.
-        kafkaTemplate.send(TOPIC, document.id().toString(), json);
+        kafkaTemplate.send(UPLOADED_TOPIC, document.id().toString(), json);
+    }
+
+    /**
+     * Publishes a <strong>{@code document.deleted}</strong> event to Kafka after a document
+     * has been soft-deleted (status transitioned to {@code DELETED}).
+     *
+     * <p>Processing-service consumes this event to clean up derived data: extracted text,
+     * search index rows, and thumbnails associated with the deleted document.</p>
+     *
+     * <p>The event is built from the {@link DocumentDeleted} type that is code-generated from the
+     * shared JSON Schema contract, following the same serialization strategy as
+     * {@link #documentUploaded(Document)}.</p>
+     *
+     * @param documentId the identifier of the document that was soft-deleted
+     */
+    @Override
+    public void documentDeleted(UUID documentId) {
+        // Build the contract event (type generated from the shared JSON Schema).
+        DocumentDeleted event = new DocumentDeleted()
+                // Unique per-message id; used for consumer-side idempotency.
+                .withId(UUID.randomUUID())
+                // Type discriminator so polyglot consumers can route/filter the message.
+                .withType(DELETED_EVENT_TYPE)
+                // Schema major version, letting consumers cope with future payload evolution.
+                .withVersion(EVENT_VERSION)
+                // Event creation time (offset-aware), serialized as ISO-8601 by Jackson 3.
+                .withTimestamp(OffsetDateTime.now())
+                // Event-specific body.
+                .withPayload(new DocumentDeletedPayload()
+                        // The aggregate this event refers to (links back to the soft-deleted row).
+                        .withDocumentId(documentId));
+
+        // Serialize to plain contract JSON ourselves (no Spring type headers); Jackson 3 throws unchecked.
+        String json = jsonMapper.writeValueAsString(event);
+
+        // Publish keyed by documentId so all events for one document keep their order across partitions.
+        kafkaTemplate.send(DELETED_TOPIC, documentId.toString(), json);
     }
 }

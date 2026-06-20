@@ -31,7 +31,10 @@ document-service side is a conditional, idempotent update.
   MSVC C++ build tools. Install CMake with `winget install Kitware.CMake` or from
   cmake.org.
 - The backing infrastructure running (see the root `docker-compose.yml`): Kafka
-  on `localhost:9092`.
+  on `localhost:9092` and the processing PostgreSQL database on
+  `localhost:5433`.
+- Optional: `PROCESSING_DATABASE_URL` to override the default local database URL
+  (`postgres://scrinium:scrinium@localhost:5433/processing`).
 
 ## Run
 
@@ -41,4 +44,5 @@ cargo run
 
 The first build is slow because `librdkafka` is compiled from source; later
 builds are fast. The service connects to Kafka, subscribes to
-`document.uploaded`, and logs each event it receives and publishes.
+`document.uploaded`, applies its SQLx database migrations on startup, and logs
+each event it receives and publishes.

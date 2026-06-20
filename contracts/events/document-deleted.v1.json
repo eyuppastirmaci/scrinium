@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scrinium.dev/contracts/events/document-deleted.v1.json",
+  "title": "DocumentDeleted",
+  "description": "Emitted by document-service when a document is soft-deleted. Processing-service uses this to clean up extracted text, search index rows, and thumbnails.",
+  "type": "object",
+  "required": ["id", "type", "version", "timestamp", "payload"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier of this event message."
+    },
+    "type": {
+      "type": "string",
+      "description": "Event type discriminator. Constant value: \"document.deleted\"."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Schema major version."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event creation time as RFC 3339 / ISO-8601, in UTC."
+    },
+    "payload": {
+      "type": "object",
+      "title": "DocumentDeletedPayload",
+      "required": ["documentId"],
+      "properties": {
+        "documentId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the document that was deleted."
+        }
+      }
+    }
+  }
+}
