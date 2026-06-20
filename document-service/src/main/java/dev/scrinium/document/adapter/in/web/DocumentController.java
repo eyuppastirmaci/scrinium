@@ -1,5 +1,7 @@
 package dev.scrinium.document.adapter.in.web;
 
+import dev.scrinium.document.adapter.in.web.config.UploadProperties;
+import dev.scrinium.document.domain.exception.TooManyFilesException;
 import dev.scrinium.document.domain.model.Document;
 import dev.scrinium.document.domain.model.DocumentDownload;
 import dev.scrinium.document.domain.model.DocumentPage;
@@ -34,6 +36,7 @@ public class DocumentController {
     private final GetDocument getDocument;
     private final DownloadDocument downloadDocument;
     private final DeleteDocument deleteDocument;
+    private final UploadProperties uploadProperties;
     private final DocumentUploadRequestMapper uploadRequestMapper;
 
     public DocumentController(UploadDocument uploadDocument,
@@ -41,23 +44,41 @@ public class DocumentController {
                               GetDocument getDocument,
                               DownloadDocument downloadDocument,
                               DeleteDocument deleteDocument,
+                              UploadProperties uploadProperties,
                               DocumentUploadRequestMapper uploadRequestMapper) {
         this.uploadDocument = uploadDocument;
         this.listDocuments = listDocuments;
         this.getDocument = getDocument;
         this.downloadDocument = downloadDocument;
         this.deleteDocument = deleteDocument;
+        this.uploadProperties = uploadProperties;
         this.uploadRequestMapper = uploadRequestMapper;
     }
 
     @PostMapping(consumes = "multipart/form-data")
-    public ResponseEntity<UploadResponse> upload(
-            @RequestParam("file") MultipartFile file
+    public ResponseEntity<List<UploadResult>> upload(
+            @RequestParam("file") List<MultipartFile> files
     ) {
-        Document document = uploadDocument.upload(uploadRequestMapper.toCommand(file));
+        // Reject requests that exceed the configured file count limit.
+        if (files.size() > uploadProperties.maxFilesPerRequest()) {
+            throw new TooManyFilesException(files.size(), uploadProperties.maxFilesPerRequest());
+        }
 
-        return ResponseEntity.accepted()
-                .body(new UploadResponse(document.id(), document.status().name()));
+        // Process each file independently; collect results with per-file success or failure.
+        List<UploadResult> results = files.stream()
+                .map(this::uploadSingle)
+                .toList();
+
+        return ResponseEntity.accepted().body(results);
+    }
+
+    private UploadResult uploadSingle(MultipartFile file) {
+        try {
+            Document document = uploadDocument.upload(uploadRequestMapper.toCommand(file));
+            return UploadResult.success(document.id(), document.status().name());
+        } catch (RuntimeException e) {
+            return UploadResult.failure(file.getOriginalFilename(), e.getMessage());
+        }
     }
 
     @GetMapping
@@ -104,7 +125,15 @@ public class DocumentController {
         return ResponseEntity.noContent().build();
     }
 
-    public record UploadResponse(UUID id, String status) {}
+    public record UploadResult(UUID id, String fileName, String status, String error) {
+        static UploadResult success(UUID id, String status) {
+            return new UploadResult(id, null, status, null);
+        }
+
+        static UploadResult failure(String fileName, String error) {
+            return new UploadResult(null, fileName, "FAILED", error);
+        }
+    }
 
     public record DocumentSummary(
             UUID id, String fileName, String contentType,

@@ -6,6 +6,7 @@ import dev.scrinium.document.adapter.out.storage.exception.DocumentStorageExcept
 import dev.scrinium.document.domain.exception.DocumentNotFoundException;
 import dev.scrinium.document.domain.exception.DuplicateDocumentException;
 import dev.scrinium.document.domain.exception.InvalidDocumentException;
+import dev.scrinium.document.domain.exception.TooManyFilesException;
 import dev.scrinium.document.domain.exception.UnsupportedFileTypeException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -16,6 +17,18 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class DocumentExceptionHandler {
+
+    // 400 Bad Request: the number of files in the request exceeds the configured maximum.
+    @ExceptionHandler(TooManyFilesException.class)
+    public ProblemDetail handleTooManyFiles(TooManyFilesException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, ex.getMessage()
+        );
+
+        problem.setTitle("Too many files");
+
+        return problem;
+    }
 
     // 409 Conflict: a non-deleted document with the same SHA-256 content hash already exists.
     @ExceptionHandler(DuplicateDocumentException.class)

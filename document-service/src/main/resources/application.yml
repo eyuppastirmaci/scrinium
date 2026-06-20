@@ -26,6 +26,7 @@ spring:
 
 scrinium:
   upload:
+    max-files-per-request: 10
     supported-content-types:
       - application/pdf
       - image/jpeg
