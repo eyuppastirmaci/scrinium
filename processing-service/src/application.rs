@@ -17,8 +17,16 @@ impl<'a, P: EventPublisher> ProcessDocument<'a, P> {
         let uploaded: DocumentUploaded = serde_json::from_slice(raw_payload)
             .map_err(|e| HandleError::Skip(format!("malformed event: {e}")))?;
 
-        let document_id = uploaded.payload.document_id;
-        println!("received document.uploaded for {document_id}");
+        let payload = uploaded.payload;
+        let document_id = payload.document_id;
+        println!(
+            "received document.uploaded for {document_id}: {} ({} bytes, {}, key {}, sha256 {})",
+            payload.file_name,
+            payload.size_bytes,
+            payload.content_type,
+            payload.storage_object_key,
+            payload.sha256
+        );
 
         // Phase-1 walking skeleton: "processing" is a no-op.
 

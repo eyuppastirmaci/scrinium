@@ -9,12 +9,18 @@ import java.util.UUID;
 public record Document(
         UUID id,
         String fileName,
+        String contentType,
+        long sizeBytes,
+        String storageObjectKey,
+        String sha256,
         DocumentStatus status,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {
     public Document {
         Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(contentType, "contentType");
+        Objects.requireNonNull(storageObjectKey, "storageObjectKey");
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(createdAt, "createdAt");
         Objects.requireNonNull(updatedAt, "updatedAt");
@@ -22,9 +28,39 @@ public record Document(
         if (fileName == null || fileName.isBlank()) {
             throw new InvalidDocumentException("fileName must not be blank");
         }
+        if (contentType.isBlank()) {
+            throw new InvalidDocumentException("contentType must not be blank");
+        }
+        if (sizeBytes <= 0) {
+            throw new InvalidDocumentException("sizeBytes must be positive");
+        }
+        if (storageObjectKey.isBlank()) {
+            throw new InvalidDocumentException("storageObjectKey must not be blank");
+        }
+        if (sha256 != null && sha256.isBlank()) {
+            throw new InvalidDocumentException("sha256 must not be blank when present");
+        }
     }
 
-    public static Document pending(UUID id, String fileName, OffsetDateTime now) {
-        return new Document(id, fileName, DocumentStatus.PENDING, now, now);
+    public static Document pending(
+            UUID id,
+            String fileName,
+            String contentType,
+            long sizeBytes,
+            String storageObjectKey,
+            String sha256,
+            OffsetDateTime now
+    ) {
+        return new Document(
+                id,
+                fileName,
+                contentType,
+                sizeBytes,
+                storageObjectKey,
+                sha256,
+                DocumentStatus.PENDING,
+                now,
+                now
+        );
     }
 }

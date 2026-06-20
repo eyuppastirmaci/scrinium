@@ -1,5 +1,5 @@
-use crate::domain::{EventPublisher, PublishError};
 use crate::contract::{DocumentProcessingCompleted, DocumentProcessingCompletedPayload};
+use crate::domain::{EventPublisher, PublishError};
 use chrono::Utc;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::StreamConsumer;

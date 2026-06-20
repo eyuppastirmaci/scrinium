@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://scrinium.dev/contracts/events/document-uploaded.v1.json",
   "title": "DocumentUploaded",
-  "description": "Emitted by document-service once a document record has been persisted with status PENDING and is ready to be processed.",
+  "description": "Emitted by document-service once a document record has been persisted with status PENDING and its original file is available in object storage.",
   "type": "object",
   "required": ["id", "type", "version", "timestamp", "payload"],
   "properties": {
@@ -28,7 +28,14 @@
     "payload": {
       "type": "object",
       "title": "DocumentUploadedPayload",
-      "required": ["documentId", "fileName"],
+      "required": [
+        "documentId",
+        "fileName",
+        "contentType",
+        "sizeBytes",
+        "storageObjectKey",
+        "sha256"
+      ],
       "properties": {
         "documentId": {
           "type": "string",
@@ -39,6 +46,28 @@
           "type": "string",
           "minLength": 1,
           "description": "Original file name supplied at upload time."
+        },
+        "contentType": {
+          "type": "string",
+          "minLength": 1,
+          "description": "MIME type detected or supplied during upload."
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "format": "int64",
+          "javaType": "java.lang.Long",
+          "minimum": 1,
+          "description": "Original file size in bytes."
+        },
+        "storageObjectKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Object key of the original file in the documents object-storage bucket."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Lowercase hexadecimal SHA-256 digest of the stored file."
         }
       }
     }

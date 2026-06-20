@@ -10,6 +10,11 @@ pub struct DocumentUploaded {
 #[serde(rename_all = "camelCase")]
 pub struct DocumentUploadedPayload {
     pub document_id: String,
+    pub file_name: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub storage_object_key: String,
+    pub sha256: String,
 }
 
 // --- Outbound: serialized to exactly the JSON Schema shape. ---

@@ -16,16 +16,19 @@ import java.util.UUID;
 public class DocumentController {
 
     private final UploadDocument uploadDocument;
+    private final DocumentUploadRequestMapper uploadRequestMapper;
 
-    public DocumentController(UploadDocument uploadDocument) {
+    public DocumentController(UploadDocument uploadDocument,
+                              DocumentUploadRequestMapper uploadRequestMapper) {
         this.uploadDocument = uploadDocument;
+        this.uploadRequestMapper = uploadRequestMapper;
     }
 
     @PostMapping(consumes = "multipart/form-data")
     public ResponseEntity<UploadResponse> upload(
             @RequestParam("file") MultipartFile file
     ) {
-        Document document = uploadDocument.upload(new UploadDocument.Command(file.getOriginalFilename()));
+        Document document = uploadDocument.upload(uploadRequestMapper.toCommand(file));
 
         return ResponseEntity.accepted()
                 .body(new UploadResponse(document.id(), document.status().name()));

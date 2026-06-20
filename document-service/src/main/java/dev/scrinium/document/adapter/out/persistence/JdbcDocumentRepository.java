@@ -19,11 +19,35 @@ public class JdbcDocumentRepository implements DocumentRepository {
     @Override
     public void save(Document document) {
         jdbcClient.sql("""
-                INSERT INTO documents (id, file_name, status, created_at, updated_at)
-                VALUES (:id, :fileName, :status, :createdAt, :updatedAt)
+                INSERT INTO documents (
+                    id,
+                    file_name,
+                    content_type,
+                    size_bytes,
+                    storage_object_key,
+                    sha256,
+                    status,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    :id,
+                    :fileName,
+                    :contentType,
+                    :sizeBytes,
+                    :storageObjectKey,
+                    :sha256,
+                    :status,
+                    :createdAt,
+                    :updatedAt
+                )
                 """)
                 .param("id", document.id())
                 .param("fileName", document.fileName())
+                .param("contentType", document.contentType())
+                .param("sizeBytes", document.sizeBytes())
+                .param("storageObjectKey", document.storageObjectKey())
+                .param("sha256", document.sha256())
                 .param("status", document.status().name())
                 .param("createdAt", document.createdAt())
                 .param("updatedAt", document.updatedAt())

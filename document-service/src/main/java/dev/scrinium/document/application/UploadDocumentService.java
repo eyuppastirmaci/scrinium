@@ -1,9 +1,12 @@
 package dev.scrinium.document.application;
 
 import dev.scrinium.document.domain.model.Document;
+import dev.scrinium.document.domain.model.DocumentFile;
+import dev.scrinium.document.domain.model.StoredDocument;
 import dev.scrinium.document.domain.port.in.UploadDocument;
 import dev.scrinium.document.domain.port.out.DocumentEventPublisher;
 import dev.scrinium.document.domain.port.out.DocumentRepository;
+import dev.scrinium.document.domain.port.out.DocumentStorage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,12 +17,15 @@ import java.util.UUID;
 public class UploadDocumentService implements UploadDocument {
 
     private final DocumentRepository repository;
+    private final DocumentStorage storage;
     private final DocumentEventPublisher eventPublisher;
 
     public UploadDocumentService(DocumentRepository repository,
+                                 DocumentStorage storage,
                                  DocumentEventPublisher eventPublisher
     ) {
         this.repository = repository;
+        this.storage = storage;
         this.eventPublisher = eventPublisher;
     }
 
@@ -41,10 +47,23 @@ public class UploadDocumentService implements UploadDocument {
     @Override
     @Transactional
     public Document upload(Command command) {
+        UUID documentId = UUID.randomUUID();
+        StoredDocument storedDocument = storage.store(new DocumentFile(
+                documentId,
+                command.fileName(),
+                command.contentType(),
+                command.sizeBytes(),
+                command.content()
+        ));
+
         // Create an always-valid PENDING aggregate; invariants (e.g. non-blank fileName) are enforced in its constructor.
         Document document = Document.pending(
-                UUID.randomUUID(),
+                documentId,
                 command.fileName(),
+                storedDocument.contentType(),
+                storedDocument.sizeBytes(),
+                storedDocument.objectKey(),
+                storedDocument.sha256(),
                 OffsetDateTime.now()
         );
 

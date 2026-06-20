@@ -1,0 +1,12 @@
+.smoke-logs/
+
+# Build outputs
+target/
+document-service/target/
+processing-service/target/
+
+# IDE and OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

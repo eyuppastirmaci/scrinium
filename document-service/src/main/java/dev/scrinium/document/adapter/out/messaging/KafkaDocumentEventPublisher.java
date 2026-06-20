@@ -17,7 +17,7 @@ public class KafkaDocumentEventPublisher implements DocumentEventPublisher {
     private static final String TOPIC = "document.uploaded";
 
     private static final String EVENT_TYPE = "document.uploaded";
-    private static final int EVENT_VERSION = 1;
+    private static final long EVENT_VERSION = 1L;
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final JsonMapper jsonMapper;
@@ -44,7 +44,7 @@ public class KafkaDocumentEventPublisher implements DocumentEventPublisher {
      * <p><em>Note:</em> this is the outbound-port implementation; the rest of the application depends
      * only on {@link dev.scrinium.document.domain.port.out.DocumentEventPublisher}, never on Kafka.</p>
      *
-     * @param document the persisted document the event refers to; its id and file name populate the payload
+     * @param document the persisted document the event refers to; its metadata populates the payload
      */
     @Override
     public void documentUploaded(Document document) {
@@ -62,8 +62,12 @@ public class KafkaDocumentEventPublisher implements DocumentEventPublisher {
                 .withPayload(new DocumentUploadedPayload()
                         // The aggregate this event refers to (links back to the persisted row).
                         .withDocumentId(document.id())
-                        // Minimal metadata the consumer needs at this stage.
-                        .withFileName(document.fileName()));
+                        // Original and storage metadata the processing-service needs to read the file.
+                        .withFileName(document.fileName())
+                        .withContentType(document.contentType())
+                        .withSizeBytes(document.sizeBytes())
+                        .withStorageObjectKey(document.storageObjectKey())
+                        .withSha256(document.sha256()));
 
         // Serialize to plain contract JSON ourselves (no Spring type headers); Jackson 3 throws unchecked.
         String json = jsonMapper.writeValueAsString(event);

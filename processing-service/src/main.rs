@@ -3,7 +3,7 @@ mod application;
 mod contract;
 mod domain;
 
-use adapter::{build_consumer, KafkaEventPublisher};
+use adapter::{KafkaEventPublisher, build_consumer};
 use application::{HandleError, ProcessDocument};
 use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::message::Message;
