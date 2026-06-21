@@ -1,0 +1,3 @@
+mod sqlx_processing_job_repository;
+
+pub use sqlx_processing_job_repository::SqlxProcessingJobRepository;

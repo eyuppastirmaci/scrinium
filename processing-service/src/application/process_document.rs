@@ -1,7 +1,6 @@
-use crate::contract::DocumentUploaded;
-use crate::domain::{
-    EventPublisher, NewProcessingJob, ProcessingJobRepository, ProcessingJobStatus,
-};
+use crate::adapter::inbound::kafka::contract::DocumentUploaded;
+use crate::domain::model::{NewProcessingJob, ProcessingJobStatus};
+use crate::domain::port::{EventPublisher, ProcessingJobRepository};
 use uuid::Uuid;
 
 pub struct ProcessDocument<'a, P: EventPublisher, R: ProcessingJobRepository> {
@@ -17,8 +16,6 @@ impl<'a, P: EventPublisher, R: ProcessingJobRepository> ProcessDocument<'a, P, R
         }
     }
 
-    /// Handles one document.uploaded payload. Returns Ok(()) if the offset may be
-    /// committed; Err if the message should be retried (at-least-once).
     pub async fn handle(&self, raw_payload: &[u8]) -> Result<(), HandleError> {
         let uploaded: DocumentUploaded = serde_json::from_slice(raw_payload)
             .map_err(|e| HandleError::Skip(format!("malformed event: {e}")))?;
@@ -84,6 +81,6 @@ impl<'a, P: EventPublisher, R: ProcessingJobRepository> ProcessDocument<'a, P, R
 
 #[derive(Debug)]
 pub enum HandleError {
-    Skip(String),  // commit the offset (don't reprocess a bad message)
-    Retry(String), // leave the offset (reprocess later)
+    Skip(String),
+    Retry(String),
 }

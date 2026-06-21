@@ -1,32 +1,6 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-// Driven port: the application announces a completed processing through this,
-// without knowing the transport (Kafka, etc.).
-#[async_trait::async_trait]
-pub trait EventPublisher {
-    async fn processing_completed(&self, document_id: &str) -> Result<(), PublishError>;
-}
-
-#[derive(Debug)]
-pub struct PublishError(pub String);
-
-// Driven port: the application records durable processing state through this,
-// without knowing the database technology.
-#[async_trait::async_trait]
-pub trait ProcessingJobRepository {
-    async fn find_by_document_id(
-        &self,
-        document_id: Uuid,
-    ) -> Result<Option<ProcessingJob>, JobStoreError>;
-
-    async fn start_or_update_received(&self, job: NewProcessingJob) -> Result<(), JobStoreError>;
-
-    async fn mark_completed(&self, document_id: Uuid) -> Result<(), JobStoreError>;
-
-    async fn mark_failed(&self, document_id: Uuid, reason: &str) -> Result<(), JobStoreError>;
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessingJob {
     pub document_id: Uuid,
@@ -73,16 +47,13 @@ impl ProcessingJobStatus {
         }
     }
 
-    pub fn from_db_str(s: &str) -> Result<Self, JobStoreError> {
+    pub fn from_db_str(s: &str) -> Result<Self, String> {
         match s {
             "RECEIVED" => Ok(Self::Received),
             "PROCESSING" => Ok(Self::Processing),
             "COMPLETED" => Ok(Self::Completed),
             "FAILED" => Ok(Self::Failed),
-            other => Err(JobStoreError(format!("unknown job status: {other}"))),
+            other => Err(format!("unknown job status: {other}")),
         }
     }
 }
-
-#[derive(Debug)]
-pub struct JobStoreError(pub String);
