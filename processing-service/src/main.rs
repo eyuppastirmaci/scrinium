@@ -6,11 +6,28 @@ mod domain;
 use adapter::inbound::kafka::build_consumer;
 use adapter::outbound::messaging::KafkaEventPublisher;
 use adapter::outbound::persistence::SqlxProcessingJobRepository;
+use adapter::outbound::processing::digital_pdf_processor::DigitalPdfProcessor;
+use adapter::outbound::processing::image_processor::ImageProcessor;
+use adapter::outbound::processing::preprocessing::*;
+use adapter::outbound::processing::scanned_pdf_processor::ScannedPdfProcessor;
+use adapter::outbound::processing::tesseract_ocr::TesseractOcr;
+use adapter::outbound::storage::S3DocumentStorage;
 use application::{HandleError, ProcessDocument};
 use config::AppConfig;
+use pdfium_render::prelude::*;
 use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::message::Message;
 use sqlx::postgres::PgPoolOptions;
+use std::sync::Arc;
+
+fn build_preprocessing_pipeline() -> PreprocessingPipeline {
+    PreprocessingPipeline::new(vec![
+        Box::new(GrayscaleStep),
+        Box::new(DpiNormalizationStep),
+        Box::new(DenoiseStep),
+        Box::new(ContrastNormalizationStep),
+    ])
+}
 
 #[tokio::main]
 async fn main() {
@@ -29,9 +46,68 @@ async fn main() {
         .expect("processing database migration failed");
     println!("processing-service database migrations applied");
 
+    let s3_config = aws_config::from_env()
+        .endpoint_url(&config.storage_endpoint)
+        .credentials_provider(aws_sdk_s3::config::Credentials::new(
+            &config.storage_access_key,
+            &config.storage_secret_key,
+            None,
+            None,
+            "env",
+        ))
+        .region(aws_sdk_s3::config::Region::new("us-east-1"))
+        .load()
+        .await;
+
+    let s3_client = aws_sdk_s3::Client::from_conf(
+        aws_sdk_s3::config::Builder::from(&s3_config)
+            .force_path_style(true)
+            .build(),
+    );
+
+    let ocr: Arc<dyn domain::port::OcrEngine> = Arc::new(TesseractOcr::new(
+        config.tesseract_path.clone(),
+        config.tesseract_languages.clone(),
+    ));
+    println!(
+        "processing-service Tesseract configured: {} ({})",
+        config.tesseract_path, config.tesseract_languages
+    );
+
+    let digital_pdf_processor = DigitalPdfProcessor::new();
+    let image_processor = ImageProcessor::new(build_preprocessing_pipeline(), Arc::clone(&ocr));
+
+    let pdfium_bindings = Pdfium::bind_to_library(
+        Pdfium::pdfium_platform_library_name_at_path("./"),
+    )
+    .or_else(|_| Pdfium::bind_to_system_library());
+
+    let scanned_pdf_processor = match pdfium_bindings {
+        Ok(bindings) => {
+            println!("processing-service PDFium loaded");
+            Some(ScannedPdfProcessor::new(
+                Pdfium::new(bindings),
+                build_preprocessing_pipeline(),
+                Arc::clone(&ocr),
+            ))
+        }
+        Err(e) => {
+            eprintln!("PDFium not available, scanned PDF processing disabled: {e}");
+            None
+        }
+    };
+
     let publisher = KafkaEventPublisher::new(&config.kafka_brokers);
     let repository = SqlxProcessingJobRepository::new(db_pool);
-    let use_case = ProcessDocument::new(&publisher, &repository);
+    let storage = S3DocumentStorage::new(s3_client, config.storage_bucket);
+
+    let mut use_case = ProcessDocument::new(&publisher, &repository, &storage)
+        .with_digital_pdf_processor(Box::new(digital_pdf_processor))
+        .with_image_processor(Box::new(image_processor));
+
+    if let Some(processor) = scanned_pdf_processor {
+        use_case = use_case.with_scanned_pdf_processor(Box::new(processor));
+    }
 
     let consumer = build_consumer(&config.kafka_brokers, &config.kafka_group_id);
     consumer

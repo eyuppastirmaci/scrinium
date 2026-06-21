@@ -19,6 +19,8 @@ public interface DocumentRepository {
      */
     int markReadyIfPending(UUID documentId);
 
+    int markFailedIfPending(UUID documentId);
+
     int markDeleted(UUID documentId);
 
     List<Document> findAll(int offset, int limit);

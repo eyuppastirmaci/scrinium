@@ -93,7 +93,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
         return jdbcClient.sql("""
             UPDATE documents
                SET status = 'DELETED', updated_at = now()
-             WHERE id = :id AND status IN ('PENDING', 'READY')
+             WHERE id = :id AND status IN ('PENDING', 'READY', 'FAILED')
             """)
                 .param("id", documentId)
                 .update();
@@ -111,13 +111,24 @@ public class JdbcDocumentRepository implements DocumentRepository {
     }
 
     @Override
+    public int markFailedIfPending(UUID documentId) {
+        return jdbcClient.sql("""
+            UPDATE documents
+               SET status = 'FAILED', updated_at = now()
+             WHERE id = :id AND status = 'PENDING'
+            """)
+                .param("id", documentId)
+                .update();
+    }
+
+    @Override
     public List<Document> findAll(int offset, int limit) {
         return jdbcClient.sql("""
                 SELECT id, file_name, content_type, size_bytes,
                        storage_object_key, sha256, status,
                        created_at, updated_at
                   FROM documents
-                 WHERE status IN ('PENDING', 'READY')
+                 WHERE status IN ('PENDING', 'READY', 'FAILED')
                  ORDER BY created_at DESC
                  LIMIT :limit OFFSET :offset
                 """)
@@ -131,7 +142,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
     public long countAccessible() {
         return jdbcClient.sql("""
                 SELECT COUNT(*) FROM documents
-                 WHERE status IN ('PENDING', 'READY')
+                 WHERE status IN ('PENDING', 'READY', 'FAILED')
                 """)
                 .query(Long.class)
                 .single();
