@@ -1,4 +1,8 @@
-import { get } from './client'
+import { get, del, ApiError } from './client'
+
+export { ApiError }
+
+export type DocumentStatus = 'PENDING' | 'READY' | 'FAILED' | 'DELETED'
 
 export interface UploadConstraints {
   supportedContentTypes: string[]
@@ -14,8 +18,52 @@ export interface UploadResult {
   error: string | null
 }
 
+export interface DocumentSummary {
+  id: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  status: DocumentStatus
+  createdAt: string
+}
+
+export interface DocumentListResponse {
+  items: DocumentSummary[]
+  page: number
+  size: number
+  totalElements: number
+  hasNext: boolean
+}
+
+export interface DocumentDetail {
+  id: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  sha256: string
+  status: DocumentStatus
+  createdAt: string
+  updatedAt: string
+}
+
 export function fetchUploadConstraints(): Promise<UploadConstraints> {
   return get<UploadConstraints>('/documents/upload-constraints')
+}
+
+export function fetchDocuments(page = 0, size = 20): Promise<DocumentListResponse> {
+  return get<DocumentListResponse>(`/documents?page=${page}&size=${size}`)
+}
+
+export function fetchDocument(id: string): Promise<DocumentDetail> {
+  return get<DocumentDetail>(`/documents/${id}`)
+}
+
+export function deleteDocument(id: string): Promise<void> {
+  return del(`/documents/${id}`)
+}
+
+export function getDownloadUrl(id: string): string {
+  return `/api/documents/${id}/download`
 }
 
 export function uploadSingleFile(
@@ -39,6 +87,16 @@ export function uploadSingleFile(
       if (xhr.status >= 200 && xhr.status < 300) {
         const results: UploadResult[] = JSON.parse(xhr.responseText)
         resolve(results[0])
+      } else if (xhr.status === 409) {
+        try {
+          const parsed = JSON.parse(xhr.responseText)
+          const err = new ApiError(409, parsed.detail ?? 'Duplicate document', {
+            existingDocumentId: parsed.existingDocumentId,
+          })
+          reject(err)
+        } catch {
+          reject(new ApiError(409, 'Duplicate document'))
+        }
       } else {
         let message: string
         try {
@@ -47,12 +105,12 @@ export function uploadSingleFile(
         } catch {
           message = xhr.responseText || xhr.statusText
         }
-        reject(new Error(message))
+        reject(new ApiError(xhr.status, message))
       }
     })
 
-    xhr.addEventListener('error', () => reject(new Error('Network error')))
-    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+    xhr.addEventListener('error', () => reject(new ApiError(0, 'Network error')))
+    xhr.addEventListener('abort', () => reject(new ApiError(0, 'Upload cancelled')))
 
     xhr.send(formData)
   })

@@ -98,6 +98,13 @@ watch(() => props.files.length, async () => {
           </span>
           <span v-else-if="staged.status === 'error'" class="file-item__error">
             {{ staged.error }}
+            <RouterLink
+              v-if="staged.duplicateId"
+              :to="{ name: 'document-detail', params: { id: staged.duplicateId } }"
+              class="file-item__dup-link"
+            >
+              View existing
+            </RouterLink>
           </span>
           <span v-else class="file-item__meta">{{ formatFileSize(staged.file.size) }}</span>
         </div>
@@ -248,6 +255,12 @@ watch(() => props.files.length, async () => {
 .file-item__error {
   font-size: 11px;
   color: var(--color-danger);
+}
+
+.file-item__dup-link {
+  color: var(--color-accent);
+  margin-left: 6px;
+  text-decoration: underline;
 }
 
 .file-item__remove {

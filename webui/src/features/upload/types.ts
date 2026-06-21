@@ -4,4 +4,5 @@ export interface StagedFile {
   progress: number
   error?: string
   rejectReason?: string
+  duplicateId?: string
 }

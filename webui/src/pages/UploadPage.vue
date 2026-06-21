@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { File as FileIcon, RotateCcw } from '@lucide/vue'
 import DropZone from '../features/upload/DropZone.vue'
 import FileList from '../features/upload/FileList.vue'
-import { fetchUploadConstraints, uploadSingleFile, type UploadConstraints } from '../api/documents'
+import { fetchUploadConstraints, uploadSingleFile, ApiError, type UploadConstraints } from '../api/documents'
 import type { StagedFile } from '../features/upload/types'
 import { formatFileSize } from '../utils/format'
 
@@ -84,7 +84,12 @@ async function doUpload() {
       staged.status = 'done'
     } catch (e: unknown) {
       staged.status = 'error'
-      staged.error = (e as Error).message || 'Upload failed'
+      if (e instanceof ApiError && e.status === 409) {
+        staged.error = 'This file already exists in your archive'
+        staged.duplicateId = e.properties.existingDocumentId as string
+      } else {
+        staged.error = (e as Error).message || 'Upload failed'
+      }
     }
   })
 

@@ -1,19 +1,30 @@
 <script setup lang="ts">
-import { ArchiveRestore } from '@lucide/vue'
-import UploadPage from './pages/UploadPage.vue'
+import { ArchiveRestore, FolderOpen, Upload } from '@lucide/vue'
 </script>
 
 <template>
   <div class="layout">
     <header class="header">
-      <div class="header__logo">
-        <ArchiveRestore :size="20" class="header__icon" />
-        <span>Scrinium</span>
+      <div class="header__left">
+        <RouterLink to="/" class="header__logo">
+          <ArchiveRestore :size="20" class="header__logo-icon" />
+          <span>Scrinium</span>
+        </RouterLink>
+        <nav class="header__nav">
+          <RouterLink to="/" class="header__link">
+            <FolderOpen :size="16" :stroke-width="1.5" />
+            <span>Documents</span>
+          </RouterLink>
+          <RouterLink to="/upload" class="header__link">
+            <Upload :size="16" :stroke-width="1.5" />
+            <span>Upload</span>
+          </RouterLink>
+        </nav>
       </div>
     </header>
 
     <main class="main">
-      <UploadPage />
+      <RouterView />
     </main>
   </div>
 </template>
@@ -35,6 +46,12 @@ import UploadPage from './pages/UploadPage.vue'
   flex-shrink: 0;
 }
 
+.header__left {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
 .header__logo {
   display: flex;
   align-items: center;
@@ -44,8 +61,35 @@ import UploadPage from './pages/UploadPage.vue'
   color: var(--color-text-primary);
 }
 
-.header__icon {
+.header__logo-icon {
   color: var(--color-accent);
+}
+
+.header__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header__link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.header__link:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-elevated);
+}
+
+.header__link.router-link-active {
+  color: var(--color-accent);
+  background-color: var(--color-accent-subtle);
 }
 
 .main {
