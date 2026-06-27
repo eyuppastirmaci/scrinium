@@ -59,7 +59,7 @@ class DocumentTest {
         // Structural invariant (programming error) -> NPE, not a domain exception.
         assertThatThrownBy(() ->
                 new Document(null, "invoice.pdf", "application/pdf", 1_024,
-                        "documents/id/invoice.pdf", null, DocumentStatus.PENDING,
+                        "documents/id/invoice.pdf", null, DocumentStatus.PENDING, null,
                         OffsetDateTime.now(), OffsetDateTime.now()))
                 .isInstanceOf(NullPointerException.class);
     }

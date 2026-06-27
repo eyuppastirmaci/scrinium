@@ -63,7 +63,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
     public Optional<Document> findById(UUID documentId) {
         return jdbcClient.sql("""
                 SELECT id, file_name, content_type, size_bytes,
-                       storage_object_key, sha256, status,
+                       storage_object_key, sha256, status, failure_reason,
                        created_at, updated_at
                   FROM documents
                  WHERE id = :id AND status IN ('PENDING', 'READY')
@@ -77,7 +77,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
     public Optional<Document> findBySha256(String sha256) {
         return jdbcClient.sql("""
                 SELECT id, file_name, content_type, size_bytes,
-                       storage_object_key, sha256, status,
+                       storage_object_key, sha256, status, failure_reason,
                        created_at, updated_at
                   FROM documents
                  WHERE sha256 = :sha256 AND status IN ('PENDING', 'READY')
@@ -111,13 +111,14 @@ public class JdbcDocumentRepository implements DocumentRepository {
     }
 
     @Override
-    public int markFailedIfPending(UUID documentId) {
+    public int markFailedIfPending(UUID documentId, String reason) {
         return jdbcClient.sql("""
             UPDATE documents
-               SET status = 'FAILED', updated_at = now()
+               SET status = 'FAILED', failure_reason = :reason, updated_at = now()
              WHERE id = :id AND status = 'PENDING'
             """)
                 .param("id", documentId)
+                .param("reason", reason)
                 .update();
     }
 
@@ -125,7 +126,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
     public List<Document> findAll(int offset, int limit) {
         return jdbcClient.sql("""
                 SELECT id, file_name, content_type, size_bytes,
-                       storage_object_key, sha256, status,
+                       storage_object_key, sha256, status, failure_reason,
                        created_at, updated_at
                   FROM documents
                  WHERE status IN ('PENDING', 'READY', 'FAILED')
@@ -157,6 +158,7 @@ public class JdbcDocumentRepository implements DocumentRepository {
                     rs.getString("storage_object_key"),
                     rs.getString("sha256"),
                     DocumentStatus.valueOf(rs.getString("status")),
+                    rs.getString("failure_reason"),
                     rs.getObject("created_at", OffsetDateTime.class),
                     rs.getObject("updated_at", OffsetDateTime.class)
             );

@@ -30,7 +30,10 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Self {
-        let _ = dotenvy::dotenv();
+        match dotenvy::dotenv() {
+            Ok(path) => println!("loaded .env from {}", path.display()),
+            Err(e) => println!(".env not loaded: {e}"),
+        }
 
         Self {
             kafka_brokers: env::var("PROCESSING_KAFKA_BROKERS")

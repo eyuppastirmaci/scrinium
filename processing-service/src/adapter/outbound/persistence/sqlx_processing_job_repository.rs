@@ -126,6 +126,42 @@ impl ProcessingJobRepository for SqlxProcessingJobRepository {
         .map(|_| ())
         .map_err(|e| JobStoreError(format!("save_extracted_pages: {e}")))
     }
+
+    async fn find_extracted_pages(
+        &self,
+        document_id: Uuid,
+    ) -> Result<Vec<ExtractedPage>, JobStoreError> {
+        let rows = sqlx::query_as::<_, ExtractedPageRow>(
+            "SELECT page_number, extracted_text
+             FROM extracted_pages
+             WHERE document_id = $1
+             ORDER BY page_number ASC",
+        )
+        .bind(document_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| JobStoreError(format!("find_extracted_pages: {e}")))?;
+
+        Ok(rows
+            .into_iter()
+            .map(ExtractedPageRow::into_domain)
+            .collect())
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct ExtractedPageRow {
+    page_number: i32,
+    extracted_text: String,
+}
+
+impl ExtractedPageRow {
+    fn into_domain(self) -> ExtractedPage {
+        ExtractedPage {
+            page_number: self.page_number,
+            text: self.extracted_text,
+        }
+    }
 }
 
 #[derive(sqlx::FromRow)]

@@ -22,8 +22,8 @@ public class MarkDocumentFailedService implements MarkDocumentFailed {
 
     @Override
     @Transactional
-    public void markFailed(UUID documentId) {
-        int updated = repository.markFailedIfPending(documentId);
+    public void markFailed(UUID documentId, String reason) {
+        int updated = repository.markFailedIfPending(documentId, reason);
 
         if (updated == 1) {
             log.info("Document {} marked FAILED", documentId);

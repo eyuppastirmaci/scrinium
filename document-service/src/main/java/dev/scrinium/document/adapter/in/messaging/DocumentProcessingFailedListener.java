@@ -34,6 +34,6 @@ public class DocumentProcessingFailedListener {
 
         log.info("Received document.processing.failed for {}: {}", documentId, reason);
 
-        markDocumentFailed.markFailed(documentId);
+        markDocumentFailed.markFailed(documentId, reason);
     }
 }

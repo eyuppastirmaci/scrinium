@@ -1,5 +1,5 @@
-use crate::domain::model::DocumentMetadata;
-use crate::domain::port::MetadataRepository;
+use crate::domain::model::{DocumentMetadata, ExtractedPage};
+use crate::domain::port::{MetadataRepository, ProcessingJobRepository};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -12,18 +12,26 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct HttpState {
     metadata_repository: Arc<dyn MetadataRepository>,
+    processing_job_repository: Arc<dyn ProcessingJobRepository>,
 }
 
 impl HttpState {
-    pub fn new(metadata_repository: Arc<dyn MetadataRepository>) -> Self {
+    pub fn new(
+        metadata_repository: Arc<dyn MetadataRepository>,
+        processing_job_repository: Arc<dyn ProcessingJobRepository>,
+    ) -> Self {
         Self {
             metadata_repository,
+            processing_job_repository,
         }
     }
 }
 
-pub fn router(metadata_repository: Arc<dyn MetadataRepository>) -> Router {
-    let state = HttpState::new(metadata_repository);
+pub fn router(
+    metadata_repository: Arc<dyn MetadataRepository>,
+    processing_job_repository: Arc<dyn ProcessingJobRepository>,
+) -> Router {
+    let state = HttpState::new(metadata_repository, processing_job_repository);
 
     Router::new()
         .route(
@@ -34,6 +42,8 @@ pub fn router(metadata_repository: Arc<dyn MetadataRepository>) -> Router {
             "/documents/{document_id}/metadata",
             get(get_document_metadata),
         )
+        .route("/api/documents/{document_id}/text", get(get_document_text))
+        .route("/documents/{document_id}/text", get(get_document_text))
         .with_state(state)
 }
 
@@ -86,6 +96,55 @@ async fn get_document_metadata(
     }
 }
 
+async fn get_document_text(
+    State(state): State<HttpState>,
+    Path(document_id): Path<String>,
+) -> Response {
+    let document_id = match Uuid::parse_str(&document_id) {
+        Ok(document_id) => document_id,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "invalid_document_id",
+                    message: "document_id must be a UUID",
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    match state
+        .processing_job_repository
+        .find_extracted_pages(document_id)
+        .await
+    {
+        Ok(pages) if pages.is_empty() => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "extracted_text_not_found",
+                message: "extracted text was not found for this document",
+            }),
+        )
+            .into_response(),
+        Ok(pages) => Json(DocumentTextResponse::new(document_id, pages)).into_response(),
+        Err(e) => {
+            eprintln!(
+                "extracted text retrieval failed for document {document_id}: {}",
+                e.0
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "extracted_text_retrieval_failed",
+                    message: "extracted text could not be retrieved",
+                }),
+            )
+                .into_response()
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DocumentMetadataResponse {
@@ -127,6 +186,46 @@ impl From<DocumentMetadata> for DocumentMetadataResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocumentTextResponse {
+    document_id: String,
+    pages: Vec<ExtractedPageResponse>,
+    combined_text: String,
+}
+
+impl DocumentTextResponse {
+    fn new(document_id: Uuid, pages: Vec<ExtractedPage>) -> Self {
+        let combined_text = pages
+            .iter()
+            .map(|page| page.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        Self {
+            document_id: document_id.to_string(),
+            pages: pages.into_iter().map(ExtractedPageResponse::from).collect(),
+            combined_text,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExtractedPageResponse {
+    page_number: i32,
+    text: String,
+}
+
+impl From<ExtractedPage> for ExtractedPageResponse {
+    fn from(page: ExtractedPage) -> Self {
+        Self {
+            page_number: page.page_number,
+            text: page.text,
+        }
+    }
+}
+
+#[derive(Serialize)]
 struct ErrorResponse {
     error: &'static str,
     message: &'static str,
@@ -159,5 +258,30 @@ mod tests {
         assert_eq!(response.page_count, Some(2));
         assert_eq!(response.metadata["pdf"]["hasDocumentInfo"], true);
         assert_eq!(response.detected_language.as_deref(), Some("tur"));
+    }
+
+    #[test]
+    fn document_text_response_combines_pages_for_copy_and_download() {
+        let response = DocumentTextResponse::new(
+            Uuid::nil(),
+            vec![
+                ExtractedPage {
+                    page_number: 1,
+                    text: "First page text".to_string(),
+                },
+                ExtractedPage {
+                    page_number: 2,
+                    text: "Second page text".to_string(),
+                },
+            ],
+        );
+
+        assert_eq!(response.document_id, Uuid::nil().to_string());
+        assert_eq!(response.pages.len(), 2);
+        assert_eq!(response.pages[0].page_number, 1);
+        assert_eq!(
+            response.combined_text,
+            "First page text\n\nSecond page text"
+        );
     }
 }

@@ -42,8 +42,37 @@ export interface DocumentDetail {
   sizeBytes: number
   sha256: string
   status: DocumentStatus
+  failureReason: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface DocumentMetadata {
+  documentId: string
+  pageCount: number | null
+  pdfCreatedAt: string | null
+  pdfModifiedAt: string | null
+  pdfAuthor: string | null
+  pdfTitle: string | null
+  imageCapturedAt: string | null
+  imageDevice: string | null
+  imageGpsPresent: boolean
+  imageGpsRedacted: boolean
+  detectedLanguage: string | null
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ExtractedPage {
+  pageNumber: number
+  text: string
+}
+
+export interface DocumentExtractedText {
+  documentId: string
+  pages: ExtractedPage[]
+  combinedText: string
 }
 
 export function fetchUploadConstraints(): Promise<UploadConstraints> {
@@ -60,6 +89,14 @@ export function fetchDocument(id: string): Promise<DocumentDetail> {
 
 export function deleteDocument(id: string): Promise<void> {
   return del(`/documents/${id}`)
+}
+
+export function fetchDocumentMetadata(id: string): Promise<DocumentMetadata> {
+  return get<DocumentMetadata>(`/documents/${id}/metadata`)
+}
+
+export function fetchDocumentText(id: string): Promise<DocumentExtractedText> {
+  return get<DocumentExtractedText>(`/documents/${id}/text`)
 }
 
 export function getDownloadUrl(id: string): string {

@@ -5,7 +5,7 @@ use uuid::Uuid;
 pub struct JobStoreError(pub String);
 
 #[async_trait::async_trait]
-pub trait ProcessingJobRepository {
+pub trait ProcessingJobRepository: Send + Sync {
     async fn find_by_document_id(
         &self,
         document_id: Uuid,
@@ -22,4 +22,9 @@ pub trait ProcessingJobRepository {
         document_id: Uuid,
         pages: &[ExtractedPage],
     ) -> Result<(), JobStoreError>;
+
+    async fn find_extracted_pages(
+        &self,
+        document_id: Uuid,
+    ) -> Result<Vec<ExtractedPage>, JobStoreError>;
 }

@@ -98,6 +98,7 @@ async fn main() {
     let publisher = KafkaEventPublisher::new(&config.kafka_brokers);
     let repository = SqlxProcessingJobRepository::new(db_pool.clone());
     let metadata_repository = SqlxMetadataRepository::new(db_pool.clone());
+    let http_processing_repository = Arc::new(SqlxProcessingJobRepository::new(db_pool.clone()));
     let http_metadata_repository = Arc::new(SqlxMetadataRepository::new(db_pool));
     let storage = S3DocumentStorage::new(s3_client, config.storage_bucket);
     let metadata_extractor = CompositeMetadataExtractor::new(vec![
@@ -127,7 +128,7 @@ async fn main() {
 
         if let Err(e) = axum::serve(
             listener,
-            http::router(http_metadata_repository).into_make_service(),
+            http::router(http_metadata_repository, http_processing_repository).into_make_service(),
         )
         .await
         {

@@ -116,7 +116,8 @@ public class DocumentController {
         Document d = getDocument.get(id);
         return new DocumentDetailResponse(
                 d.id(), d.fileName(), d.contentType(), d.sizeBytes(),
-                d.sha256(), d.status().name(), d.createdAt(), d.updatedAt());
+                d.sha256(), d.status().name(), d.failureReason(),
+                d.createdAt(), d.updatedAt());
     }
 
     @GetMapping("/{id}/download")
@@ -157,7 +158,7 @@ public class DocumentController {
 
     public record DocumentDetailResponse(
             UUID id, String fileName, String contentType, long sizeBytes,
-            String sha256, String status,
+            String sha256, String status, String failureReason,
             OffsetDateTime createdAt, OffsetDateTime updatedAt) {}
 
     public record UploadConstraintsResponse(

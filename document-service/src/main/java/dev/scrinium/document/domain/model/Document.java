@@ -14,6 +14,7 @@ public record Document(
         String storageObjectKey,
         String sha256,
         DocumentStatus status,
+        String failureReason,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {
@@ -40,6 +41,9 @@ public record Document(
         if (sha256 != null && sha256.isBlank()) {
             throw new InvalidDocumentException("sha256 must not be blank when present");
         }
+        if (failureReason != null && failureReason.isBlank()) {
+            throw new InvalidDocumentException("failureReason must not be blank when present");
+        }
     }
 
     public static Document pending(
@@ -59,6 +63,7 @@ public record Document(
                 storageObjectKey,
                 sha256,
                 DocumentStatus.PENDING,
+                null,
                 now,
                 now
         );

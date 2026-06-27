@@ -19,7 +19,7 @@ public interface DocumentRepository {
      */
     int markReadyIfPending(UUID documentId);
 
-    int markFailedIfPending(UUID documentId);
+    int markFailedIfPending(UUID documentId, String reason);
 
     int markDeleted(UUID documentId);
 
