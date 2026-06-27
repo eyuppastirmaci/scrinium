@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { FileText, Image } from '@lucide/vue'
 import StatusBadge from '../../components/StatusBadge.vue'
 import { formatFileSize, formatDate } from '../../utils/format'
-import type { DocumentSummary } from '../../api/documents'
+import { getThumbnailUrl, type DocumentSummary } from '../../api/documents'
 
-defineProps<{ document: DocumentSummary }>()
+const props = defineProps<{ document: DocumentSummary }>()
+
+const thumbFailed = ref(false)
 
 function isImage(contentType: string): boolean {
   return contentType.startsWith('image/')
 }
+
+const showThumbnail = props.document.status === 'READY'
 </script>
 
 <template>
@@ -17,7 +22,15 @@ function isImage(contentType: string): boolean {
     class="row"
   >
     <div class="row__name">
+      <img
+        v-if="showThumbnail && !thumbFailed"
+        :src="getThumbnailUrl(document.id, 'small')"
+        alt=""
+        class="row__thumb"
+        @error="thumbFailed = true"
+      />
       <component
+        v-else
         :is="isImage(document.contentType) ? Image : FileText"
         :size="16" :stroke-width="1.5"
         class="row__icon"
@@ -54,6 +67,15 @@ function isImage(contentType: string): boolean {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.row__thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
 }
 
 .row__icon {

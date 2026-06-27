@@ -1,10 +1,10 @@
-use crate::domain::model::{DocumentMetadata, ExtractedPage};
-use crate::domain::port::{MetadataRepository, ProcessingJobRepository};
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use crate::domain::model::{DocumentMetadata, ExtractedPage, ThumbnailSize};
+use crate::domain::port::{DocumentStorage, MetadataRepository, ProcessingJobRepository, ThumbnailRepository};
+use axum::extract::{Path, Query, State};
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing::get};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -13,16 +13,22 @@ use uuid::Uuid;
 pub struct HttpState {
     metadata_repository: Arc<dyn MetadataRepository>,
     processing_job_repository: Arc<dyn ProcessingJobRepository>,
+    thumbnail_repository: Arc<dyn ThumbnailRepository>,
+    storage: Arc<dyn DocumentStorage>,
 }
 
 impl HttpState {
     pub fn new(
         metadata_repository: Arc<dyn MetadataRepository>,
         processing_job_repository: Arc<dyn ProcessingJobRepository>,
+        thumbnail_repository: Arc<dyn ThumbnailRepository>,
+        storage: Arc<dyn DocumentStorage>,
     ) -> Self {
         Self {
             metadata_repository,
             processing_job_repository,
+            thumbnail_repository,
+            storage,
         }
     }
 }
@@ -30,8 +36,10 @@ impl HttpState {
 pub fn router(
     metadata_repository: Arc<dyn MetadataRepository>,
     processing_job_repository: Arc<dyn ProcessingJobRepository>,
+    thumbnail_repository: Arc<dyn ThumbnailRepository>,
+    storage: Arc<dyn DocumentStorage>,
 ) -> Router {
-    let state = HttpState::new(metadata_repository, processing_job_repository);
+    let state = HttpState::new(metadata_repository, processing_job_repository, thumbnail_repository, storage);
 
     Router::new()
         .route(
@@ -44,6 +52,8 @@ pub fn router(
         )
         .route("/api/documents/{document_id}/text", get(get_document_text))
         .route("/documents/{document_id}/text", get(get_document_text))
+        .route("/api/documents/{document_id}/thumbnail", get(get_document_thumbnail))
+        .route("/documents/{document_id}/thumbnail", get(get_document_thumbnail))
         .with_state(state)
 }
 
@@ -221,6 +231,98 @@ impl From<ExtractedPage> for ExtractedPageResponse {
         Self {
             page_number: page.page_number,
             text: page.text,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct ThumbnailQuery {
+    size: Option<String>,
+}
+
+async fn get_document_thumbnail(
+    State(state): State<HttpState>,
+    Path(document_id): Path<String>,
+    Query(query): Query<ThumbnailQuery>,
+) -> Response {
+    let document_id = match Uuid::parse_str(&document_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "invalid_document_id",
+                    message: "document_id must be a UUID",
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let size = match query.size.as_deref().unwrap_or("small") {
+        "small" => ThumbnailSize::Small,
+        "medium" => ThumbnailSize::Medium,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "invalid_size",
+                    message: "size must be 'small' or 'medium'",
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let record = match state
+        .thumbnail_repository
+        .find_by_document_id_and_size(document_id, size)
+        .await
+    {
+        Ok(Some(record)) => record,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "thumbnail_not_found",
+                    message: "thumbnail was not found for this document",
+                }),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            eprintln!("thumbnail lookup failed for document {document_id}: {}", e.0);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "thumbnail_lookup_failed",
+                    message: "thumbnail record could not be retrieved",
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    match state.storage.read_document(&record.storage_key).await {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "image/jpeg"),
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => {
+            eprintln!("thumbnail read failed for document {document_id}: {}", e.0);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "thumbnail_read_failed",
+                    message: "thumbnail could not be read from storage",
+                }),
+            )
+                .into_response()
         }
     }
 }

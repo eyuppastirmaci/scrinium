@@ -1,5 +1,7 @@
 mod sqlx_metadata_repository;
 mod sqlx_processing_job_repository;
+mod sqlx_thumbnail_repository;
 
 pub use sqlx_metadata_repository::SqlxMetadataRepository;
 pub use sqlx_processing_job_repository::SqlxProcessingJobRepository;
+pub use sqlx_thumbnail_repository::SqlxThumbnailRepository;

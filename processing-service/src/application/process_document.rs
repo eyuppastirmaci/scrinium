@@ -4,9 +4,10 @@ use crate::domain::model::{
     ExtractedDocumentMetadata, NewDocumentMetadata, NewProcessingJob, ProcessingJobStatus,
     ProcessingResult,
 };
+use crate::domain::model::ThumbnailSize;
 use crate::domain::port::{
     DocumentProcessor, DocumentStorage, EventPublisher, MetadataExtractionInput, MetadataExtractor,
-    MetadataRepository, ProcessingJobRepository,
+    MetadataRepository, ProcessingJobRepository, ThumbnailGenerator, ThumbnailRepository,
 };
 use uuid::Uuid;
 
@@ -24,6 +25,8 @@ where
     image_processor: Option<Box<dyn DocumentProcessor>>,
     metadata_repository: Option<&'a dyn MetadataRepository>,
     metadata_extractor: Option<Box<dyn MetadataExtractor>>,
+    thumbnail_generator: Option<Box<dyn ThumbnailGenerator>>,
+    thumbnail_repository: Option<&'a dyn ThumbnailRepository>,
 }
 
 impl<'a, P, R, S> ProcessDocument<'a, P, R, S>
@@ -42,6 +45,8 @@ where
             image_processor: None,
             metadata_repository: None,
             metadata_extractor: None,
+            thumbnail_generator: None,
+            thumbnail_repository: None,
         }
     }
 
@@ -67,6 +72,16 @@ where
     ) -> Self {
         self.metadata_repository = Some(repository);
         self.metadata_extractor = Some(extractor);
+        self
+    }
+
+    pub fn with_thumbnail_generator(
+        mut self,
+        generator: Box<dyn ThumbnailGenerator>,
+        repository: &'a dyn ThumbnailRepository,
+    ) -> Self {
+        self.thumbnail_generator = Some(generator);
+        self.thumbnail_repository = Some(repository);
         self
     }
 
@@ -148,6 +163,9 @@ where
                 self.store_metadata(document_id, &content, &payload.content_type, Some(&r))
                     .await?;
 
+                self.generate_thumbnails(document_id, &content, &payload.content_type)
+                    .await;
+
                 self.repository
                     .mark_completed(document_id)
                     .await
@@ -163,6 +181,9 @@ where
             Ok(None) => {
                 self.store_metadata(document_id, &content, &payload.content_type, None)
                     .await?;
+
+                self.generate_thumbnails(document_id, &content, &payload.content_type)
+                    .await;
 
                 self.repository
                     .mark_completed(document_id)
@@ -252,6 +273,52 @@ where
         println!("saved metadata for document {document_id}");
 
         Ok(())
+    }
+
+    async fn generate_thumbnails(
+        &self,
+        document_id: Uuid,
+        content: &[u8],
+        content_type: &str,
+    ) {
+        let Some(generator) = &self.thumbnail_generator else {
+            return;
+        };
+
+        for &size in ThumbnailSize::all() {
+            match generator.generate(content, content_type, size) {
+                Ok(thumb) => {
+                    let key = ThumbnailSize::storage_key(document_id, size);
+                    if let Err(e) = self.storage.write_object(&key, &thumb.bytes, "image/jpeg").await {
+                        eprintln!(
+                            "failed to store {} thumbnail for document {document_id}: {}",
+                            size.suffix(), e.0
+                        );
+                        continue;
+                    }
+                    if let Some(repo) = self.thumbnail_repository {
+                        if let Err(e) = repo
+                            .upsert(document_id, size, &key, thumb.width as i32, thumb.height as i32)
+                            .await
+                        {
+                            eprintln!(
+                                "failed to persist {} thumbnail record for document {document_id}: {}",
+                                size.suffix(), e.0
+                            );
+                            continue;
+                        }
+                    }
+                    println!(
+                        "saved {} thumbnail for document {document_id} ({}x{}, {} bytes)",
+                        size.suffix(), thumb.width, thumb.height, thumb.bytes.len()
+                    );
+                }
+                Err(e) => eprintln!(
+                    "failed to generate {} thumbnail for document {document_id}: {}",
+                    size.suffix(), e.0
+                ),
+            }
+        }
     }
 
     async fn process_content(

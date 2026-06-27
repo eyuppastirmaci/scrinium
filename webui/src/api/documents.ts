@@ -99,6 +99,10 @@ export function fetchDocumentText(id: string): Promise<DocumentExtractedText> {
   return get<DocumentExtractedText>(`/documents/${id}/text`)
 }
 
+export function getThumbnailUrl(id: string, size: 'small' | 'medium' = 'small'): string {
+  return `/api/documents/${id}/thumbnail?size=${size}`
+}
+
 export function getDownloadUrl(id: string): string {
   return `/api/documents/${id}/download`
 }

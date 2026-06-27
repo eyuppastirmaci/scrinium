@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { FileText, Image } from '@lucide/vue'
 import StatusBadge from '../../components/StatusBadge.vue'
 import { formatFileSize, formatDate } from '../../utils/format'
-import type { DocumentSummary } from '../../api/documents'
+import { getThumbnailUrl, type DocumentSummary } from '../../api/documents'
 
-defineProps<{ document: DocumentSummary }>()
+const props = defineProps<{ document: DocumentSummary }>()
+
+const thumbFailed = ref(false)
 
 function isImage(contentType: string): boolean {
   return contentType.startsWith('image/')
 }
+
+const showThumbnail = props.document.status === 'READY'
 </script>
 
 <template>
@@ -17,7 +22,15 @@ function isImage(contentType: string): boolean {
     class="card"
   >
     <div class="card__top">
+      <img
+        v-if="showThumbnail && !thumbFailed"
+        :src="getThumbnailUrl(document.id, 'small')"
+        alt=""
+        class="card__thumb"
+        @error="thumbFailed = true"
+      />
       <component
+        v-else
         :is="isImage(document.contentType) ? Image : FileText"
         :size="28" :stroke-width="1.5"
         class="card__icon"
@@ -49,6 +62,14 @@ function isImage(contentType: string): boolean {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 12px;
+}
+
+.card__thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
 }
 
 .card__icon {

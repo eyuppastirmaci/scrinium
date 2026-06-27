@@ -64,10 +64,29 @@ ignored by Git. The checked-in `.env.example` documents the supported variables:
 - `PROCESSING_STORAGE_BUCKET`
 - `PROCESSING_TESSERACT_PATH`
 - `PROCESSING_TESSERACT_LANGUAGES`
+- `PROCESSING_PDFIUM_PATH`
 - `PROCESSING_HTTP_ADDR`
 
 If Tesseract is available on `PATH`, leave `PROCESSING_TESSERACT_PATH=tesseract`.
 Otherwise set it to the local executable path.
+
+### PDFium (optional, enables PDF thumbnails and scanned PDF processing)
+
+1. Download the latest `pdfium-v8-win-x64.tgz` from
+   [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases).
+2. Extract the archive and copy `bin/pdfium.dll` to a local directory, e.g.
+   `C:\Users\<you>\lib\pdfium\`.
+3. Set `PROCESSING_PDFIUM_PATH` in `.env` to that directory:
+
+   ```
+   PROCESSING_PDFIUM_PATH='C:/Users/<you>/lib/pdfium'
+   ```
+
+   Note: use forward slashes and single quotes for paths with spaces.
+
+Without PDFium the service still runs — scanned PDF processing and PDF thumbnail
+generation are skipped, while digital PDF text extraction and image processing
+work normally.
 
 ## Run
 

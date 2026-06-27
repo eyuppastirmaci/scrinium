@@ -6,13 +6,13 @@ use pdfium_render::prelude::*;
 use std::sync::Arc;
 
 pub struct ScannedPdfProcessor {
-    pdfium: Pdfium,
+    pdfium: Arc<Pdfium>,
     pipeline: PreprocessingPipeline,
     ocr: Arc<dyn OcrEngine>,
 }
 
 impl ScannedPdfProcessor {
-    pub fn new(pdfium: Pdfium, pipeline: PreprocessingPipeline, ocr: Arc<dyn OcrEngine>) -> Self {
+    pub fn new(pdfium: Arc<Pdfium>, pipeline: PreprocessingPipeline, ocr: Arc<dyn OcrEngine>) -> Self {
         Self {
             pdfium,
             pipeline,

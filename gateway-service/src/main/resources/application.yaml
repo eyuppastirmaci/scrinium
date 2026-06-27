@@ -17,6 +17,14 @@ spring:
               filters:
                 - StripPrefix=1
 
+            # Route thumbnail reads to processing-service.
+            - id: processing-service-thumbnail
+              uri: http://localhost:8091
+              predicates:
+                - Path=/api/documents/*/thumbnail
+              filters:
+                - StripPrefix=1
+
             # Route extracted text reads to processing-service.
             - id: processing-service-text
               uri: http://localhost:8091

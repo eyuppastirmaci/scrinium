@@ -3,7 +3,7 @@ use processing_service::adapter::inbound::http;
 use processing_service::adapter::inbound::kafka::build_consumer;
 use processing_service::adapter::outbound::messaging::KafkaEventPublisher;
 use processing_service::adapter::outbound::persistence::{
-    SqlxMetadataRepository, SqlxProcessingJobRepository,
+    SqlxMetadataRepository, SqlxProcessingJobRepository, SqlxThumbnailRepository,
 };
 use processing_service::adapter::outbound::processing::digital_pdf_processor::DigitalPdfProcessor;
 use processing_service::adapter::outbound::processing::image_processor::ImageProcessor;
@@ -14,6 +14,9 @@ use processing_service::adapter::outbound::processing::metadata::{
 use processing_service::adapter::outbound::processing::preprocessing::*;
 use processing_service::adapter::outbound::processing::scanned_pdf_processor::ScannedPdfProcessor;
 use processing_service::adapter::outbound::processing::tesseract_ocr::TesseractOcr;
+use processing_service::adapter::outbound::processing::thumbnail::{
+    CompositeThumbnailGenerator, ImageThumbnailGenerator, PdfThumbnailGenerator,
+};
 use processing_service::adapter::outbound::storage::S3DocumentStorage;
 use processing_service::application::{HandleError, ProcessDocument};
 use processing_service::config::AppConfig;
@@ -77,29 +80,42 @@ async fn main() {
     let image_processor = ImageProcessor::new(build_preprocessing_pipeline(), Arc::clone(&ocr));
 
     let pdfium_bindings =
-        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
+        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(&config.pdfium_path))
             .or_else(|_| Pdfium::bind_to_system_library());
 
-    let scanned_pdf_processor = match pdfium_bindings {
+    let (scanned_pdf_processor, pdf_thumbnail_generator) = match pdfium_bindings {
         Ok(bindings) => {
             println!("processing-service PDFium loaded");
-            Some(ScannedPdfProcessor::new(
-                Pdfium::new(bindings),
-                build_preprocessing_pipeline(),
-                Arc::clone(&ocr),
-            ))
+            let pdfium = Arc::new(Pdfium::new(bindings));
+            (
+                Some(ScannedPdfProcessor::new(
+                    Arc::clone(&pdfium),
+                    build_preprocessing_pipeline(),
+                    Arc::clone(&ocr),
+                )),
+                Some(PdfThumbnailGenerator::new(pdfium)),
+            )
         }
         Err(e) => {
             eprintln!("PDFium not available, scanned PDF processing disabled: {e}");
-            None
+            (None, None)
         }
     };
+
+    let thumbnail_generator = CompositeThumbnailGenerator::new(
+        Box::new(ImageThumbnailGenerator::new()),
+        pdf_thumbnail_generator.map(|g| Box::new(g) as Box<dyn domain::port::ThumbnailGenerator>),
+    );
 
     let publisher = KafkaEventPublisher::new(&config.kafka_brokers);
     let repository = SqlxProcessingJobRepository::new(db_pool.clone());
     let metadata_repository = SqlxMetadataRepository::new(db_pool.clone());
     let http_processing_repository = Arc::new(SqlxProcessingJobRepository::new(db_pool.clone()));
-    let http_metadata_repository = Arc::new(SqlxMetadataRepository::new(db_pool));
+    let http_metadata_repository = Arc::new(SqlxMetadataRepository::new(db_pool.clone()));
+    let thumbnail_repository = SqlxThumbnailRepository::new(db_pool.clone());
+    let http_thumbnail_repository = Arc::new(SqlxThumbnailRepository::new(db_pool));
+    let http_storage: Arc<dyn domain::port::DocumentStorage> =
+        Arc::new(S3DocumentStorage::new(s3_client.clone(), config.storage_bucket.clone()));
     let storage = S3DocumentStorage::new(s3_client, config.storage_bucket);
     let metadata_extractor = CompositeMetadataExtractor::new(vec![
         Box::new(PdfMetadataExtractor::new()),
@@ -110,7 +126,8 @@ async fn main() {
     let mut use_case = ProcessDocument::new(&publisher, &repository, &storage)
         .with_digital_pdf_processor(Box::new(digital_pdf_processor))
         .with_image_processor(Box::new(image_processor))
-        .with_metadata(&metadata_repository, Box::new(metadata_extractor));
+        .with_metadata(&metadata_repository, Box::new(metadata_extractor))
+        .with_thumbnail_generator(Box::new(thumbnail_generator), &thumbnail_repository);
 
     if let Some(processor) = scanned_pdf_processor {
         use_case = use_case.with_scanned_pdf_processor(Box::new(processor));
@@ -128,7 +145,7 @@ async fn main() {
 
         if let Err(e) = axum::serve(
             listener,
-            http::router(http_metadata_repository, http_processing_repository).into_make_service(),
+            http::router(http_metadata_repository, http_processing_repository, http_thumbnail_repository, http_storage).into_make_service(),
         )
         .await
         {

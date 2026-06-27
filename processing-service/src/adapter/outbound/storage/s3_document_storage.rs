@@ -1,4 +1,5 @@
 use crate::domain::port::{DocumentStorage, StorageError};
+use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
 
 pub struct S3DocumentStorage {
@@ -33,5 +34,19 @@ impl DocumentStorage for S3DocumentStorage {
             .to_vec();
 
         Ok(bytes)
+    }
+
+    async fn write_object(&self, key: &str, bytes: &[u8], content_type: &str) -> Result<(), StorageError> {
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .content_type(content_type)
+            .body(ByteStream::from(bytes.to_vec()))
+            .send()
+            .await
+            .map_err(|e| StorageError(format!("S3 put_object failed for '{key}': {e}")))?;
+
+        Ok(())
     }
 }
