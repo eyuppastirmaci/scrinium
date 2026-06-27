@@ -11,6 +11,7 @@ const DEFAULT_STORAGE_SECRET_KEY: &str = "minioadmin";
 const DEFAULT_STORAGE_BUCKET: &str = "documents";
 const DEFAULT_TESSERACT_PATH: &str = "tesseract";
 const DEFAULT_TESSERACT_LANGUAGES: &str = "tur+eng";
+const DEFAULT_REDIS_URL: &str = "redis://localhost:6379";
 const DEFAULT_PDFIUM_PATH: &str = "./";
 
 pub struct AppConfig {
@@ -25,6 +26,7 @@ pub struct AppConfig {
     pub storage_bucket: String,
     pub tesseract_path: String,
     pub tesseract_languages: String,
+    pub redis_url: String,
     pub pdfium_path: String,
 }
 
@@ -60,6 +62,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| DEFAULT_TESSERACT_PATH.to_string()),
             tesseract_languages: env::var("PROCESSING_TESSERACT_LANGUAGES")
                 .unwrap_or_else(|_| DEFAULT_TESSERACT_LANGUAGES.to_string()),
+            redis_url: env::var("PROCESSING_REDIS_URL")
+                .unwrap_or_else(|_| DEFAULT_REDIS_URL.to_string()),
             pdfium_path: env::var("PROCESSING_PDFIUM_PATH")
                 .unwrap_or_else(|_| DEFAULT_PDFIUM_PATH.to_string()),
         }

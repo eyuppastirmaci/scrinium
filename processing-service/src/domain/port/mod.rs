@@ -5,6 +5,7 @@ mod metadata_extractor;
 mod ocr_engine;
 mod preprocessing_step;
 mod processing_job_repository;
+mod progress_reporter;
 mod thumbnail_generator;
 
 pub use document_processor::*;
@@ -14,4 +15,5 @@ pub use metadata_extractor::*;
 pub use ocr_engine::*;
 pub use preprocessing_step::*;
 pub use processing_job_repository::*;
+pub use progress_reporter::*;
 pub use thumbnail_generator::*;

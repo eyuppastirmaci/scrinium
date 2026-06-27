@@ -14,6 +14,7 @@ use processing_service::adapter::outbound::processing::tesseract_ocr::TesseractO
 use processing_service::adapter::outbound::processing::thumbnail::{
     CompositeThumbnailGenerator, ImageThumbnailGenerator, PdfThumbnailGenerator,
 };
+use processing_service::adapter::outbound::redis_progress_reporter::RedisProgressReporter;
 use processing_service::adapter::outbound::storage::S3DocumentStorage;
 use processing_service::application::{HandleError, ProcessDocument};
 use processing_service::config::AppConfig;
@@ -112,11 +113,26 @@ async fn main() {
         Box::new(LanguageMetadataExtractor::new()),
     ]);
 
+    let progress_reporter = match RedisProgressReporter::new(&config.redis_url) {
+        Ok(reporter) => {
+            println!("processing-service Redis connected for progress reporting");
+            Some(reporter)
+        }
+        Err(e) => {
+            eprintln!("Redis not available, progress reporting disabled: {}", e.0);
+            None
+        }
+    };
+
     let mut use_case = ProcessDocument::new(&publisher, &repository, &storage)
         .with_digital_pdf_processor(Box::new(digital_pdf_processor))
         .with_image_processor(Box::new(image_processor))
         .with_metadata_extractor(Box::new(metadata_extractor))
         .with_thumbnail_generator(Box::new(thumbnail_generator));
+
+    if let Some(reporter) = progress_reporter {
+        use_case = use_case.with_progress_reporter(Box::new(reporter));
+    }
 
     if let Some(processor) = scanned_pdf_processor {
         use_case = use_case.with_scanned_pdf_processor(Box::new(processor));

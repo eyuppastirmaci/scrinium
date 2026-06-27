@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { FileText, Image } from '@lucide/vue'
 import StatusBadge from '../../components/StatusBadge.vue'
+import ProcessingIndicator from '../../components/ProcessingIndicator.vue'
 import { formatFileSize, formatDate } from '../../utils/format'
 import { getThumbnailUrl, type DocumentSummary } from '../../api/documents'
+import { useProcessingStatus } from '../../composables/useProcessingStatus'
 
 const props = defineProps<{ document: DocumentSummary }>()
+
+const { processingStatus, completedIds, failedIds } = useProcessingStatus()
 
 const thumbFailed = ref(false)
 
@@ -13,7 +17,15 @@ function isImage(contentType: string): boolean {
   return contentType.startsWith('image/')
 }
 
-const showThumbnail = props.document.status === 'READY'
+const effectiveStatus = computed(() => {
+  if (completedIds.has(props.document.id)) return 'READY' as const
+  if (failedIds.has(props.document.id)) return 'FAILED' as const
+  return props.document.status
+})
+
+const progress = computed(() => processingStatus[props.document.id])
+const showThumbnail = computed(() => effectiveStatus.value === 'READY' && !progress.value)
+const showIndicator = computed(() => effectiveStatus.value === 'PENDING' || !!progress.value)
 </script>
 
 <template>
@@ -22,8 +34,14 @@ const showThumbnail = props.document.status === 'READY'
     class="card"
   >
     <div class="card__top">
+      <ProcessingIndicator
+        v-if="showIndicator"
+        :status="effectiveStatus"
+        :progress="progress"
+        :size="36"
+      />
       <img
-        v-if="showThumbnail && !thumbFailed"
+        v-else-if="showThumbnail && !thumbFailed"
         :src="getThumbnailUrl(document.id, 'small')"
         alt=""
         class="card__thumb"
@@ -35,7 +53,7 @@ const showThumbnail = props.document.status === 'READY'
         :size="28" :stroke-width="1.5"
         class="card__icon"
       />
-      <StatusBadge :status="document.status" />
+      <StatusBadge :status="effectiveStatus" />
     </div>
     <p class="card__name">{{ document.fileName }}</p>
     <p class="card__meta">{{ formatFileSize(document.sizeBytes) }} · {{ formatDate(document.createdAt) }}</p>

@@ -6,7 +6,7 @@ use crate::domain::model::{
 };
 use crate::domain::port::{
     DocumentProcessor, DocumentStorage, EventPublisher, MetadataExtractionInput, MetadataExtractor,
-    ProcessingJobRepository, ThumbnailGenerator,
+    ProcessingJobRepository, ProgressReporter, ThumbnailGenerator,
 };
 use uuid::Uuid;
 
@@ -24,6 +24,7 @@ where
     image_processor: Option<Box<dyn DocumentProcessor>>,
     metadata_extractor: Option<Box<dyn MetadataExtractor>>,
     thumbnail_generator: Option<Box<dyn ThumbnailGenerator>>,
+    progress_reporter: Option<Box<dyn ProgressReporter>>,
 }
 
 impl<'a, P, R, S> ProcessDocument<'a, P, R, S>
@@ -42,6 +43,7 @@ where
             image_processor: None,
             metadata_extractor: None,
             thumbnail_generator: None,
+            progress_reporter: None,
         }
     }
 
@@ -67,6 +69,11 @@ where
 
     pub fn with_thumbnail_generator(mut self, generator: Box<dyn ThumbnailGenerator>) -> Self {
         self.thumbnail_generator = Some(generator);
+        self
+    }
+
+    pub fn with_progress_reporter(mut self, reporter: Box<dyn ProgressReporter>) -> Self {
+        self.progress_reporter = Some(reporter);
         self
     }
 
@@ -113,6 +120,8 @@ where
             .await
             .map_err(|e| HandleError::Retry(e.0))?;
 
+        self.report_progress(document_id, "received", 0).await;
+
         let content = self
             .storage
             .read_document(&payload.storage_object_key)
@@ -123,6 +132,8 @@ where
             "read {} bytes from storage for document {document_id}",
             content.len()
         );
+
+        self.report_progress(document_id, "extracting_text", 20).await;
 
         let result = self
             .process_content(&content, &payload.content_type, document_id)
@@ -138,9 +149,13 @@ where
                     total_chars
                 );
 
+                self.report_progress(document_id, "extracting_metadata", 70).await;
+
                 let metadata = self
                     .extract_metadata(document_id, &content, &payload.content_type, &pages)
                     .await;
+
+                self.report_progress(document_id, "generating_thumbnail", 85).await;
 
                 let thumbnails = self
                     .generate_thumbnails(document_id, &content, &payload.content_type)
@@ -166,6 +181,8 @@ where
                     .await
                     .map_err(|e| HandleError::Retry(e.0))?;
 
+                self.report_progress(document_id, "completed", 100).await;
+
                 println!("published document.processing.completed for {document_id}");
             }
             Err(reason) => {
@@ -181,11 +198,21 @@ where
                     .await
                     .map_err(|e| HandleError::Retry(e.0))?;
 
+                self.report_progress(document_id, "failed", -1).await;
+
                 println!("published document.processing.failed for {document_id}");
             }
         }
 
         Ok(())
+    }
+
+    async fn report_progress(&self, document_id: Uuid, step: &str, progress: i32) {
+        if let Some(reporter) = &self.progress_reporter {
+            if let Err(e) = reporter.report(document_id, step, progress).await {
+                eprintln!("progress report failed for {document_id}: {}", e.0);
+            }
+        }
     }
 
     async fn extract_metadata(
@@ -299,7 +326,9 @@ where
                     println!(
                         "document {document_id}: scanned PDF, rendering + preprocessing + OCR"
                     );
+                    self.report_progress(document_id, "preprocessing_image", 30).await;
                     if let Some(processor) = &self.scanned_pdf_processor {
+                        self.report_progress(document_id, "running_ocr", 50).await;
                         let result = processor.process(content).await.map_err(|e| e.0)?;
                         return Ok(Some(result));
                     } else {
@@ -309,7 +338,9 @@ where
             }
         } else if content_type.starts_with("image/") {
             println!("document {document_id}: image, preprocessing + OCR");
+            self.report_progress(document_id, "preprocessing_image", 30).await;
             if let Some(processor) = &self.image_processor {
+                self.report_progress(document_id, "running_ocr", 50).await;
                 let result = processor.process(content).await.map_err(|e| e.0)?;
                 return Ok(Some(result));
             } else {

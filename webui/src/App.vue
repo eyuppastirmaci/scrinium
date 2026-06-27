@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ArchiveRestore, FolderOpen, Upload } from '@lucide/vue'
+import ToastContainer from './components/ToastContainer.vue'
+import ActivityDropdown from './components/ActivityDropdown.vue'
 </script>
 
 <template>
@@ -21,7 +23,11 @@ import { ArchiveRestore, FolderOpen, Upload } from '@lucide/vue'
           </RouterLink>
         </nav>
       </div>
+      <div class="header__right">
+        <ActivityDropdown />
+      </div>
     </header>
+    <ToastContainer />
 
     <main class="main">
       <RouterView />
@@ -42,8 +48,15 @@ import { ArchiveRestore, FolderOpen, Upload } from '@lucide/vue'
   border-bottom: 1px solid var(--color-border-subtle);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 24px;
   flex-shrink: 0;
+}
+
+.header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .header__left {
