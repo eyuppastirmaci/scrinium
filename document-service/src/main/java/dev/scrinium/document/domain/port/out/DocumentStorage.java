@@ -9,4 +9,6 @@ public interface DocumentStorage {
     StoredDocument store(DocumentFile file);
 
     InputStream retrieve(String storageObjectKey);
+
+    void delete(String storageObjectKey);
 }

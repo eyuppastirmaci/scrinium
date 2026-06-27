@@ -26,3 +26,4 @@ imageproc = "0.25"
 kamadak-exif = "0.6"
 whatlang = "0.16"
 redis = { version = "0.27", features = ["tokio-comp"] }
+num_cpus = "1"

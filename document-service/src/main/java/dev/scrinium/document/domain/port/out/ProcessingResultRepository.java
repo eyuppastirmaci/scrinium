@@ -21,4 +21,8 @@ public interface ProcessingResultRepository {
     void saveThumbnails(UUID documentId, List<DocumentThumbnail> thumbnails);
 
     Optional<DocumentThumbnail> findThumbnail(UUID documentId, String size);
+
+    List<DocumentThumbnail> findThumbnails(UUID documentId);
+
+    void deleteAll(UUID documentId);
 }

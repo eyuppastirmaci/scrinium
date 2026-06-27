@@ -43,6 +43,10 @@ export function get<T>(path: string): Promise<T> {
   return request<T>(path)
 }
 
+export function post<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'POST' })
+}
+
 export function del(path: string): Promise<void> {
   return request<void>(path, { method: 'DELETE' })
 }

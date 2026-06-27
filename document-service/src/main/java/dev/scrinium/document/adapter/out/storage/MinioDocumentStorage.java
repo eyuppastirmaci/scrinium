@@ -7,6 +7,7 @@ import dev.scrinium.document.domain.port.out.DocumentStorage;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -71,6 +72,18 @@ public class MinioDocumentStorage implements DocumentStorage {
                     .build());
         } catch (Exception e) {
             throw new DocumentStorageException("Could not retrieve document from MinIO", e);
+        }
+    }
+
+    @Override
+    public void delete(String storageObjectKey) {
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(storageObjectKey)
+                    .build());
+        } catch (Exception e) {
+            throw new DocumentStorageException("Could not delete object from MinIO", e);
         }
     }
 

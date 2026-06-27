@@ -13,6 +13,7 @@ import dev.scrinium.document.domain.port.in.DeleteDocument;
 import dev.scrinium.document.domain.port.in.DownloadDocument;
 import dev.scrinium.document.domain.port.in.GetDocument;
 import dev.scrinium.document.domain.port.in.ListDocuments;
+import dev.scrinium.document.domain.port.in.RetryProcessing;
 import dev.scrinium.document.domain.port.in.UploadDocument;
 import dev.scrinium.document.domain.port.out.DocumentStorage;
 import dev.scrinium.document.domain.port.out.ProcessingResultRepository;
@@ -44,6 +45,7 @@ public class DocumentController {
     private final GetDocument getDocument;
     private final DownloadDocument downloadDocument;
     private final DeleteDocument deleteDocument;
+    private final RetryProcessing retryProcessing;
     private final UploadProperties uploadProperties;
     private final DocumentUploadRequestMapper uploadRequestMapper;
     private final ProcessingResultRepository processingResultRepository;
@@ -54,6 +56,7 @@ public class DocumentController {
                               GetDocument getDocument,
                               DownloadDocument downloadDocument,
                               DeleteDocument deleteDocument,
+                              RetryProcessing retryProcessing,
                               UploadProperties uploadProperties,
                               DocumentUploadRequestMapper uploadRequestMapper,
                               ProcessingResultRepository processingResultRepository,
@@ -63,6 +66,7 @@ public class DocumentController {
         this.getDocument = getDocument;
         this.downloadDocument = downloadDocument;
         this.deleteDocument = deleteDocument;
+        this.retryProcessing = retryProcessing;
         this.uploadProperties = uploadProperties;
         this.uploadRequestMapper = uploadRequestMapper;
         this.processingResultRepository = processingResultRepository;
@@ -148,6 +152,12 @@ public class DocumentController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         deleteDocument.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<Void> retry(@PathVariable UUID id) {
+        retryProcessing.retry(id);
+        return ResponseEntity.accepted().build();
     }
 
     @GetMapping("/{id}/metadata")

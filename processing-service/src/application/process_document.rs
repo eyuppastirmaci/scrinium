@@ -8,32 +8,27 @@ use crate::domain::port::{
     DocumentProcessor, DocumentStorage, EventPublisher, MetadataExtractionInput, MetadataExtractor,
     ProcessingJobRepository, ProgressReporter, ThumbnailGenerator,
 };
+use std::sync::Arc;
 use uuid::Uuid;
 
-pub struct ProcessDocument<'a, P, R, S>
-where
-    P: EventPublisher,
-    R: ProcessingJobRepository,
-    S: DocumentStorage,
-{
-    publisher: &'a P,
-    repository: &'a R,
-    storage: &'a S,
-    digital_pdf_processor: Option<Box<dyn DocumentProcessor>>,
-    scanned_pdf_processor: Option<Box<dyn DocumentProcessor>>,
-    image_processor: Option<Box<dyn DocumentProcessor>>,
-    metadata_extractor: Option<Box<dyn MetadataExtractor>>,
-    thumbnail_generator: Option<Box<dyn ThumbnailGenerator>>,
-    progress_reporter: Option<Box<dyn ProgressReporter>>,
+pub struct ProcessDocument {
+    publisher: Arc<dyn EventPublisher>,
+    repository: Arc<dyn ProcessingJobRepository>,
+    storage: Arc<dyn DocumentStorage>,
+    digital_pdf_processor: Option<Arc<dyn DocumentProcessor>>,
+    scanned_pdf_processor: Option<Arc<dyn DocumentProcessor>>,
+    image_processor: Option<Arc<dyn DocumentProcessor>>,
+    metadata_extractor: Option<Arc<dyn MetadataExtractor>>,
+    thumbnail_generator: Option<Arc<dyn ThumbnailGenerator>>,
+    progress_reporter: Option<Arc<dyn ProgressReporter>>,
 }
 
-impl<'a, P, R, S> ProcessDocument<'a, P, R, S>
-where
-    P: EventPublisher,
-    R: ProcessingJobRepository,
-    S: DocumentStorage,
-{
-    pub fn new(publisher: &'a P, repository: &'a R, storage: &'a S) -> Self {
+impl ProcessDocument {
+    pub fn new(
+        publisher: Arc<dyn EventPublisher>,
+        repository: Arc<dyn ProcessingJobRepository>,
+        storage: Arc<dyn DocumentStorage>,
+    ) -> Self {
         Self {
             publisher,
             repository,
@@ -47,32 +42,32 @@ where
         }
     }
 
-    pub fn with_digital_pdf_processor(mut self, processor: Box<dyn DocumentProcessor>) -> Self {
+    pub fn with_digital_pdf_processor(mut self, processor: Arc<dyn DocumentProcessor>) -> Self {
         self.digital_pdf_processor = Some(processor);
         self
     }
 
-    pub fn with_scanned_pdf_processor(mut self, processor: Box<dyn DocumentProcessor>) -> Self {
+    pub fn with_scanned_pdf_processor(mut self, processor: Arc<dyn DocumentProcessor>) -> Self {
         self.scanned_pdf_processor = Some(processor);
         self
     }
 
-    pub fn with_image_processor(mut self, processor: Box<dyn DocumentProcessor>) -> Self {
+    pub fn with_image_processor(mut self, processor: Arc<dyn DocumentProcessor>) -> Self {
         self.image_processor = Some(processor);
         self
     }
 
-    pub fn with_metadata_extractor(mut self, extractor: Box<dyn MetadataExtractor>) -> Self {
+    pub fn with_metadata_extractor(mut self, extractor: Arc<dyn MetadataExtractor>) -> Self {
         self.metadata_extractor = Some(extractor);
         self
     }
 
-    pub fn with_thumbnail_generator(mut self, generator: Box<dyn ThumbnailGenerator>) -> Self {
+    pub fn with_thumbnail_generator(mut self, generator: Arc<dyn ThumbnailGenerator>) -> Self {
         self.thumbnail_generator = Some(generator);
         self
     }
 
-    pub fn with_progress_reporter(mut self, reporter: Box<dyn ProgressReporter>) -> Self {
+    pub fn with_progress_reporter(mut self, reporter: Arc<dyn ProgressReporter>) -> Self {
         self.progress_reporter = Some(reporter);
         self
     }

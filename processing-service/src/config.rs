@@ -28,6 +28,7 @@ pub struct AppConfig {
     pub tesseract_languages: String,
     pub redis_url: String,
     pub pdfium_path: String,
+    pub max_concurrency: usize,
 }
 
 impl AppConfig {
@@ -66,6 +67,13 @@ impl AppConfig {
                 .unwrap_or_else(|_| DEFAULT_REDIS_URL.to_string()),
             pdfium_path: env::var("PROCESSING_PDFIUM_PATH")
                 .unwrap_or_else(|_| DEFAULT_PDFIUM_PATH.to_string()),
+            max_concurrency: env::var("PROCESSING_MAX_CONCURRENCY")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(|| {
+                    let cores = num_cpus::get();
+                    std::cmp::max(1, (cores.saturating_sub(1)) / 2)
+                }),
         }
     }
 }

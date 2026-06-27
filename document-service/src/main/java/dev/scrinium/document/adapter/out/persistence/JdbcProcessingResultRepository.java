@@ -160,4 +160,32 @@ public class JdbcProcessingResultRepository implements ProcessingResultRepositor
                 ))
                 .optional();
     }
+
+    @Override
+    public List<DocumentThumbnail> findThumbnails(UUID documentId) {
+        return jdbcClient.sql("""
+                SELECT document_id, size, storage_key, width, height
+                  FROM document_thumbnails
+                 WHERE document_id = :documentId
+                """)
+                .param("documentId", documentId)
+                .query((rs, _) -> new DocumentThumbnail(
+                        rs.getObject("document_id", UUID.class),
+                        rs.getString("size"),
+                        rs.getString("storage_key"),
+                        rs.getInt("width"),
+                        rs.getInt("height")
+                ))
+                .list();
+    }
+
+    @Override
+    public void deleteAll(UUID documentId) {
+        jdbcClient.sql("DELETE FROM extracted_pages WHERE document_id = :id")
+                .param("id", documentId).update();
+        jdbcClient.sql("DELETE FROM document_thumbnails WHERE document_id = :id")
+                .param("id", documentId).update();
+        jdbcClient.sql("DELETE FROM document_metadata WHERE document_id = :id")
+                .param("id", documentId).update();
+    }
 }

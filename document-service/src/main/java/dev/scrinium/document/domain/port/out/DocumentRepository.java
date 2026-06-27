@@ -21,6 +21,8 @@ public interface DocumentRepository {
 
     int markFailedIfPending(UUID documentId, String reason);
 
+    int markPendingIfFailed(UUID documentId);
+
     int markDeleted(UUID documentId);
 
     List<Document> findAll(int offset, int limit);

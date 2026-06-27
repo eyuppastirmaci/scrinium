@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft, Download, Trash2, Copy, Check, FileDown } from '@lucide/vue'
+import { ArrowLeft, Download, Trash2, Copy, Check, FileDown, RotateCcw } from '@lucide/vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import {
   fetchDocument,
   deleteDocument,
+  retryProcessing,
   getDownloadUrl,
   fetchDocumentMetadata,
   fetchDocumentText,
@@ -105,6 +106,20 @@ async function onDelete() {
   } catch {
     deleting.value = false
     showDeleteConfirm.value = false
+  }
+}
+
+const retrying = ref(false)
+
+async function onRetry() {
+  retrying.value = true
+  try {
+    await retryProcessing(props.id)
+    document.value = await fetchDocument(props.id)
+  } catch {
+    // retry failed
+  } finally {
+    retrying.value = false
   }
 }
 
@@ -240,6 +255,15 @@ function isImage(doc: DocumentDetail): boolean {
               <Download :size="15" :stroke-width="2" />
               Download
             </a>
+            <button
+              v-if="document.status === 'FAILED'"
+              class="detail__btn detail__btn--secondary"
+              :disabled="retrying"
+              @click="onRetry"
+            >
+              <RotateCcw :size="15" :stroke-width="2" />
+              {{ retrying ? 'Retrying...' : 'Retry' }}
+            </button>
             <button class="detail__btn detail__btn--danger" @click="showDeleteConfirm = true">
               <Trash2 :size="15" :stroke-width="2" />
               Delete

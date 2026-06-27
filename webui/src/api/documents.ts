@@ -1,4 +1,4 @@
-import { get, del, ApiError } from './client'
+import { get, post, del, ApiError } from './client'
 
 export { ApiError }
 
@@ -101,6 +101,10 @@ export function fetchDocumentText(id: string): Promise<DocumentExtractedText> {
 
 export function getThumbnailUrl(id: string, size: 'small' | 'medium' = 'small'): string {
   return `/api/documents/${id}/thumbnail?size=${size}`
+}
+
+export function retryProcessing(id: string): Promise<void> {
+  return post<void>(`/documents/${id}/retry`)
 }
 
 export function getDownloadUrl(id: string): string {

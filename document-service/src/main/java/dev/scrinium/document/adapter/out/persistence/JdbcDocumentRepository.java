@@ -123,6 +123,17 @@ public class JdbcDocumentRepository implements DocumentRepository {
     }
 
     @Override
+    public int markPendingIfFailed(UUID documentId) {
+        return jdbcClient.sql("""
+            UPDATE documents
+               SET status = 'PENDING', failure_reason = NULL, updated_at = now()
+             WHERE id = :id AND status = 'FAILED'
+            """)
+                .param("id", documentId)
+                .update();
+    }
+
+    @Override
     public List<Document> findAll(int offset, int limit) {
         return jdbcClient.sql("""
                 SELECT id, file_name, content_type, size_bytes,
