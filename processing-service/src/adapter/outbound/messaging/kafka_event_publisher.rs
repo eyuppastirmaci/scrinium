@@ -86,6 +86,8 @@ impl EventPublisher for KafkaEventPublisher {
         let payload = serde_json::to_string(&CompletedPayload {
             document_id: document_id.clone(),
             file_name: event.file_name.clone(),
+            content_type: event.content_type.clone(),
+            created_at: event.created_at.clone(),
             pages,
             metadata: metadata_payload,
             thumbnails,
@@ -123,6 +125,8 @@ impl EventPublisher for KafkaEventPublisher {
 struct CompletedPayload {
     document_id: String,
     file_name: String,
+    content_type: String,
+    created_at: String,
     pages: Vec<CompletedPagePayload>,
     metadata: CompletedMetadataPayload,
     thumbnails: Vec<CompletedThumbnailPayload>,

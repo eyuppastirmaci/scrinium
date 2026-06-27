@@ -74,6 +74,7 @@ where
         let uploaded: DocumentUploaded = serde_json::from_slice(raw_payload)
             .map_err(|e| HandleError::Skip(format!("malformed event: {e}")))?;
 
+        let upload_timestamp = uploaded.timestamp;
         let payload = uploaded.payload;
         let document_id: Uuid = payload
             .document_id
@@ -153,6 +154,8 @@ where
                 let event = ProcessingCompletedEvent {
                     document_id,
                     file_name: payload.file_name.clone(),
+                    content_type: payload.content_type.clone(),
+                    created_at: upload_timestamp.clone(),
                     pages,
                     metadata,
                     thumbnails,

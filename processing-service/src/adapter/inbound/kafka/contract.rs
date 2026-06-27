@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct DocumentUploaded {
+    pub timestamp: String,
     pub payload: DocumentUploadedPayload,
 }
 

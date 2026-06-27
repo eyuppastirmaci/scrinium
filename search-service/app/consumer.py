@@ -7,7 +7,10 @@ import uuid
 import asyncpg
 from aiokafka import AIOKafkaConsumer
 
-from app.indexer import upsert_document, delete_document, build_content_text, build_metadata_text
+from app.indexer import (
+    upsert_document, delete_document,
+    build_content_text, build_metadata_text, extract_document_date, _parse_iso,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +80,20 @@ async def handle_message(pool: asyncpg.Pool, event: dict) -> None:
 
     if event_type == "document.processing.completed":
         file_name: str = payload.get("fileName", "")
+        content_type: str = payload.get("contentType", "")
         pages: list[dict] = payload.get("pages", [])
         metadata: dict = payload.get("metadata", {})
 
         content = build_content_text(pages)
         metadata_text = build_metadata_text(metadata)
+        page_count: int | None = metadata.get("pageCount")
+        document_date = extract_document_date(metadata)
+        created_at = _parse_iso(payload.get("createdAt", ""))
 
-        await upsert_document(pool, doc_uuid, file_name, content, metadata_text)
+        await upsert_document(
+            pool, doc_uuid, file_name, content_type, content,
+            metadata_text, page_count, document_date, created_at,
+        )
         logger.info("indexed document %s (%d pages, %d chars)", document_id, len(pages), len(content))
 
     elif event_type == "document.deleted":

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
-import { File as FileIcon, Upload, Search, X } from '@lucide/vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { File as FileIcon, Upload, Search, X, SlidersHorizontal } from '@lucide/vue'
 import ViewToggle from '../components/ViewToggle.vue'
 import DocumentGrid from '../features/documents/DocumentGrid.vue'
 import DocumentTable from '../features/documents/DocumentTable.vue'
 import { fetchDocuments, getThumbnailUrl, type DocumentSummary } from '../api/documents'
-import { searchDocuments, type SearchResultItem } from '../api/search'
+import { searchDocuments, type SearchResultItem, type SearchFilters } from '../api/search'
 
 const documents = ref<DocumentSummary[]>([])
 const viewMode = ref<'grid' | 'list'>('grid')
@@ -22,25 +22,51 @@ const searching = ref(false)
 const searchError = ref(false)
 const isSearchActive = ref(false)
 
+const showFilters = ref(false)
+const filterType = ref('')
+const filterDateFrom = ref('')
+const filterDateTo = ref('')
+const filterMinPages = ref('')
+const filterMaxPages = ref('')
+
+const activeFilters = computed<SearchFilters>(() => {
+  const f: SearchFilters = {}
+  if (filterType.value) f.type = filterType.value
+  if (filterDateFrom.value) f.dateFrom = filterDateFrom.value
+  if (filterDateTo.value) f.dateTo = filterDateTo.value
+  if (filterMinPages.value) f.minPages = parseInt(filterMinPages.value)
+  if (filterMaxPages.value) f.maxPages = parseInt(filterMaxPages.value)
+  return f
+})
+
+const hasActiveFilters = computed(() => Object.keys(activeFilters.value).length > 0)
+
+const activeFilterCount = computed(() => Object.keys(activeFilters.value).length)
+
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-watch(searchQuery, (q) => {
+watch(searchQuery, () => scheduleSearch())
+watch(activeFilters, () => scheduleSearch(), { deep: true })
+
+function scheduleSearch() {
   if (debounceTimer) clearTimeout(debounceTimer)
-  if (!q.trim()) {
+  const q = searchQuery.value.trim()
+  if (!q && !hasActiveFilters.value) {
     isSearchActive.value = false
     searchResults.value = []
     searchError.value = false
     return
   }
-  debounceTimer = setTimeout(() => performSearch(q.trim()), 300)
-})
+  debounceTimer = setTimeout(() => performSearch(), 300)
+}
 
-async function performSearch(q: string) {
+async function performSearch() {
   searching.value = true
   searchError.value = false
   isSearchActive.value = true
   try {
-    const data = await searchDocuments(q)
+    const q = searchQuery.value.trim() || null
+    const data = await searchDocuments(q, activeFilters.value)
     searchResults.value = data.items
     searchTotalCount.value = data.totalCount
   } catch {
@@ -52,6 +78,25 @@ async function performSearch(q: string) {
 
 function clearSearch() {
   searchQuery.value = ''
+  clearFilters()
+}
+
+function clearFilters() {
+  filterType.value = ''
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
+  filterMinPages.value = ''
+  filterMaxPages.value = ''
+}
+
+function removeFilter(key: string) {
+  switch (key) {
+    case 'type': filterType.value = ''; break
+    case 'dateFrom': filterDateFrom.value = ''; break
+    case 'dateTo': filterDateTo.value = ''; break
+    case 'minPages': filterMinPages.value = ''; break
+    case 'maxPages': filterMaxPages.value = ''; break
+  }
 }
 
 async function load(p = 0) {
@@ -99,15 +144,78 @@ onMounted(async () => {
               placeholder="Search documents..."
             />
             <button
-              v-if="searchQuery"
+              v-if="searchQuery || hasActiveFilters"
               class="search-bar__clear"
               @click="clearSearch"
             >
               <X :size="14" :stroke-width="2" />
             </button>
           </div>
+          <button
+            class="filter-toggle"
+            :class="{ 'filter-toggle--active': showFilters || hasActiveFilters }"
+            @click="showFilters = !showFilters"
+          >
+            <SlidersHorizontal :size="15" :stroke-width="2" />
+            <span v-if="activeFilterCount" class="filter-toggle__badge">{{ activeFilterCount }}</span>
+          </button>
           <ViewToggle v-model="viewMode" />
         </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div v-if="showFilters" class="filter-bar">
+        <div class="filter-bar__group">
+          <label class="filter-bar__label">Type</label>
+          <select v-model="filterType" class="filter-bar__select">
+            <option value="">All</option>
+            <option value="application/pdf">PDF</option>
+            <option value="image">Image</option>
+          </select>
+        </div>
+        <div class="filter-bar__group">
+          <label class="filter-bar__label">Uploaded after</label>
+          <input v-model="filterDateFrom" type="date" class="filter-bar__date" />
+        </div>
+        <div class="filter-bar__group">
+          <label class="filter-bar__label">Uploaded before</label>
+          <input v-model="filterDateTo" type="date" class="filter-bar__date" />
+        </div>
+        <div class="filter-bar__group">
+          <label class="filter-bar__label">Min pages</label>
+          <input v-model="filterMinPages" type="number" min="1" class="filter-bar__number" placeholder="—" />
+        </div>
+        <div class="filter-bar__group">
+          <label class="filter-bar__label">Max pages</label>
+          <input v-model="filterMaxPages" type="number" min="1" class="filter-bar__number" placeholder="—" />
+        </div>
+        <button v-if="hasActiveFilters" class="filter-bar__clear" @click="clearFilters">
+          Clear filters
+        </button>
+      </div>
+
+      <!-- Active filter chips -->
+      <div v-if="hasActiveFilters && !showFilters" class="filter-chips">
+        <span v-if="activeFilters.type" class="filter-chip">
+          {{ activeFilters.type === 'application/pdf' ? 'PDF' : 'Image' }}
+          <button class="filter-chip__remove" @click="removeFilter('type')"><X :size="12" /></button>
+        </span>
+        <span v-if="activeFilters.dateFrom" class="filter-chip">
+          From {{ activeFilters.dateFrom }}
+          <button class="filter-chip__remove" @click="removeFilter('dateFrom')"><X :size="12" /></button>
+        </span>
+        <span v-if="activeFilters.dateTo" class="filter-chip">
+          To {{ activeFilters.dateTo }}
+          <button class="filter-chip__remove" @click="removeFilter('dateTo')"><X :size="12" /></button>
+        </span>
+        <span v-if="activeFilters.minPages" class="filter-chip">
+          ≥{{ activeFilters.minPages }} pages
+          <button class="filter-chip__remove" @click="removeFilter('minPages')"><X :size="12" /></button>
+        </span>
+        <span v-if="activeFilters.maxPages" class="filter-chip">
+          ≤{{ activeFilters.maxPages }} pages
+          <button class="filter-chip__remove" @click="removeFilter('maxPages')"><X :size="12" /></button>
+        </span>
       </div>
 
       <!-- Search results -->
@@ -257,6 +365,133 @@ onMounted(async () => {
 
 .search-bar__clear:hover {
   color: var(--color-text-primary);
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-border-default);
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.filter-toggle:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-elevated);
+}
+
+.filter-toggle--active {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.filter-toggle__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-pill);
+}
+
+.filter-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg-surface);
+  flex-wrap: wrap;
+}
+
+.filter-bar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-bar__label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.filter-bar__select,
+.filter-bar__date,
+.filter-bar__number {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.filter-bar__select:focus,
+.filter-bar__date:focus,
+.filter-bar__number:focus {
+  border-color: var(--color-accent);
+}
+
+.filter-bar__number {
+  width: 70px;
+}
+
+.filter-bar__clear {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  padding: 6px 0;
+  transition: color 0.15s;
+}
+
+.filter-bar__clear:hover {
+  color: var(--color-accent);
+}
+
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-accent);
+  background-color: var(--color-accent-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.filter-chip__remove {
+  color: var(--color-accent);
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.filter-chip__remove:hover {
+  opacity: 1;
 }
 
 .docs-page__empty-search {

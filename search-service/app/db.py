@@ -37,12 +37,31 @@ async def run_migrations(pool: asyncpg.Pool) -> None:
             CREATE TABLE IF NOT EXISTS search_index (
                 document_id UUID PRIMARY KEY,
                 file_name TEXT NOT NULL,
+                content_type TEXT NOT NULL DEFAULT '',
                 content TEXT NOT NULL DEFAULT '',
                 metadata_text TEXT NOT NULL DEFAULT '',
+                page_count INTEGER,
+                document_date TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
         """)
+
+        # Add columns if they don't exist (for existing databases).
+        for col, col_type, default in [
+            ("content_type", "TEXT", "''"),
+            ("page_count", "INTEGER", None),
+            ("document_date", "TIMESTAMPTZ", None),
+        ]:
+            exists = await conn.fetchval("""
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'search_index' AND column_name = $1
+            """, col)
+            if not exists:
+                default_clause = f" DEFAULT {default}" if default else ""
+                await conn.execute(
+                    f"ALTER TABLE search_index ADD COLUMN {col} {col_type}{default_clause}"
+                )
 
         exists = await conn.fetchval("""
             SELECT 1 FROM pg_indexes

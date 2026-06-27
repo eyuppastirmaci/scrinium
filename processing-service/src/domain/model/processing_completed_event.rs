@@ -4,6 +4,8 @@ use uuid::Uuid;
 pub struct ProcessingCompletedEvent {
     pub document_id: Uuid,
     pub file_name: String,
+    pub content_type: String,
+    pub created_at: String,
     pub pages: Vec<ExtractedPage>,
     pub metadata: ExtractedDocumentMetadata,
     pub thumbnails: Vec<ThumbnailInfo>,
