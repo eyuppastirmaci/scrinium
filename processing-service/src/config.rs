@@ -9,8 +9,9 @@ const DEFAULT_STORAGE_ENDPOINT: &str = "http://localhost:9000";
 const DEFAULT_STORAGE_ACCESS_KEY: &str = "minioadmin";
 const DEFAULT_STORAGE_SECRET_KEY: &str = "minioadmin";
 const DEFAULT_STORAGE_BUCKET: &str = "documents";
-const DEFAULT_TESSERACT_PATH: &str = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe";
+const DEFAULT_TESSERACT_PATH: &str = "tesseract";
 const DEFAULT_TESSERACT_LANGUAGES: &str = "tur+eng";
+const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:8091";
 
 pub struct AppConfig {
     pub kafka_brokers: String,
@@ -24,10 +25,13 @@ pub struct AppConfig {
     pub storage_bucket: String,
     pub tesseract_path: String,
     pub tesseract_languages: String,
+    pub http_addr: String,
 }
 
 impl AppConfig {
     pub fn from_env() -> Self {
+        let _ = dotenvy::dotenv();
+
         Self {
             kafka_brokers: env::var("PROCESSING_KAFKA_BROKERS")
                 .unwrap_or_else(|_| DEFAULT_KAFKA_BROKERS.to_string()),
@@ -53,6 +57,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| DEFAULT_TESSERACT_PATH.to_string()),
             tesseract_languages: env::var("PROCESSING_TESSERACT_LANGUAGES")
                 .unwrap_or_else(|_| DEFAULT_TESSERACT_LANGUAGES.to_string()),
+            http_addr: env::var("PROCESSING_HTTP_ADDR")
+                .unwrap_or_else(|_| DEFAULT_HTTP_ADDR.to_string()),
         }
     }
 }

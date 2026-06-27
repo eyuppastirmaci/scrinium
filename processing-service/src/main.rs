@@ -1,32 +1,31 @@
-mod adapter;
-mod application;
-mod config;
-mod domain;
-
-use adapter::inbound::kafka::build_consumer;
-use adapter::outbound::messaging::KafkaEventPublisher;
-use adapter::outbound::persistence::SqlxProcessingJobRepository;
-use adapter::outbound::processing::digital_pdf_processor::DigitalPdfProcessor;
-use adapter::outbound::processing::image_processor::ImageProcessor;
-use adapter::outbound::processing::preprocessing::*;
-use adapter::outbound::processing::scanned_pdf_processor::ScannedPdfProcessor;
-use adapter::outbound::processing::tesseract_ocr::TesseractOcr;
-use adapter::outbound::storage::S3DocumentStorage;
-use application::{HandleError, ProcessDocument};
-use config::AppConfig;
 use pdfium_render::prelude::*;
+use processing_service::adapter::inbound::http;
+use processing_service::adapter::inbound::kafka::build_consumer;
+use processing_service::adapter::outbound::messaging::KafkaEventPublisher;
+use processing_service::adapter::outbound::persistence::{
+    SqlxMetadataRepository, SqlxProcessingJobRepository,
+};
+use processing_service::adapter::outbound::processing::digital_pdf_processor::DigitalPdfProcessor;
+use processing_service::adapter::outbound::processing::image_processor::ImageProcessor;
+use processing_service::adapter::outbound::processing::metadata::{
+    CompositeMetadataExtractor, ImageExifMetadataExtractor, LanguageMetadataExtractor,
+    PdfMetadataExtractor,
+};
+use processing_service::adapter::outbound::processing::preprocessing::*;
+use processing_service::adapter::outbound::processing::scanned_pdf_processor::ScannedPdfProcessor;
+use processing_service::adapter::outbound::processing::tesseract_ocr::TesseractOcr;
+use processing_service::adapter::outbound::storage::S3DocumentStorage;
+use processing_service::application::{HandleError, ProcessDocument};
+use processing_service::config::AppConfig;
+use processing_service::domain;
 use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::message::Message;
 use sqlx::postgres::PgPoolOptions;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 fn build_preprocessing_pipeline() -> PreprocessingPipeline {
-    PreprocessingPipeline::new(vec![
-        Box::new(GrayscaleStep),
-        Box::new(DpiNormalizationStep),
-        Box::new(DenoiseStep),
-        Box::new(ContrastNormalizationStep),
-    ])
+    PreprocessingPipeline::new(vec![Box::new(GrayscaleStep), Box::new(DeskewStep)])
 }
 
 #[tokio::main]
@@ -77,10 +76,9 @@ async fn main() {
     let digital_pdf_processor = DigitalPdfProcessor::new();
     let image_processor = ImageProcessor::new(build_preprocessing_pipeline(), Arc::clone(&ocr));
 
-    let pdfium_bindings = Pdfium::bind_to_library(
-        Pdfium::pdfium_platform_library_name_at_path("./"),
-    )
-    .or_else(|_| Pdfium::bind_to_system_library());
+    let pdfium_bindings =
+        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
+            .or_else(|_| Pdfium::bind_to_system_library());
 
     let scanned_pdf_processor = match pdfium_bindings {
         Ok(bindings) => {
@@ -98,16 +96,44 @@ async fn main() {
     };
 
     let publisher = KafkaEventPublisher::new(&config.kafka_brokers);
-    let repository = SqlxProcessingJobRepository::new(db_pool);
+    let repository = SqlxProcessingJobRepository::new(db_pool.clone());
+    let metadata_repository = SqlxMetadataRepository::new(db_pool.clone());
+    let http_metadata_repository = Arc::new(SqlxMetadataRepository::new(db_pool));
     let storage = S3DocumentStorage::new(s3_client, config.storage_bucket);
+    let metadata_extractor = CompositeMetadataExtractor::new(vec![
+        Box::new(PdfMetadataExtractor::new()),
+        Box::new(ImageExifMetadataExtractor::new()),
+        Box::new(LanguageMetadataExtractor::new()),
+    ]);
 
     let mut use_case = ProcessDocument::new(&publisher, &repository, &storage)
         .with_digital_pdf_processor(Box::new(digital_pdf_processor))
-        .with_image_processor(Box::new(image_processor));
+        .with_image_processor(Box::new(image_processor))
+        .with_metadata(&metadata_repository, Box::new(metadata_extractor));
 
     if let Some(processor) = scanned_pdf_processor {
         use_case = use_case.with_scanned_pdf_processor(Box::new(processor));
     }
+
+    let http_addr: SocketAddr = config
+        .http_addr
+        .parse()
+        .expect("PROCESSING_HTTP_ADDR must be a socket address");
+    tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind(http_addr)
+            .await
+            .expect("processing-service HTTP bind failed");
+        println!("processing-service HTTP listening on http://{http_addr}");
+
+        if let Err(e) = axum::serve(
+            listener,
+            http::router(http_metadata_repository).into_make_service(),
+        )
+        .await
+        {
+            eprintln!("processing-service HTTP server failed: {e}");
+        }
+    });
 
     let consumer = build_consumer(&config.kafka_brokers, &config.kafka_group_id);
     consumer

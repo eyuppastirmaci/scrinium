@@ -36,6 +36,39 @@ document-service side is a conditional, idempotent update.
 - Optional: `PROCESSING_DATABASE_URL` to override the default local database URL
   (`postgres://scrinium:scrinium@localhost:5433/processing`).
 
+## Environment
+
+Copy the example environment file and adjust local values as needed:
+
+```bash
+cp .env.example .env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The service loads `.env` automatically when present. Keep `.env` local; it is
+ignored by Git. The checked-in `.env.example` documents the supported variables:
+
+- `PROCESSING_KAFKA_BROKERS`
+- `PROCESSING_KAFKA_IN_TOPIC`
+- `PROCESSING_KAFKA_GROUP_ID`
+- `PROCESSING_DATABASE_URL`
+- `PROCESSING_DB_MAX_CONNECTIONS`
+- `PROCESSING_STORAGE_ENDPOINT`
+- `PROCESSING_STORAGE_ACCESS_KEY`
+- `PROCESSING_STORAGE_SECRET_KEY`
+- `PROCESSING_STORAGE_BUCKET`
+- `PROCESSING_TESSERACT_PATH`
+- `PROCESSING_TESSERACT_LANGUAGES`
+- `PROCESSING_HTTP_ADDR`
+
+If Tesseract is available on `PATH`, leave `PROCESSING_TESSERACT_PATH=tesseract`.
+Otherwise set it to the local executable path.
+
 ## Run
 
 ```bash

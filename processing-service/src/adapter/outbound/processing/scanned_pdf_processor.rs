@@ -20,7 +20,10 @@ impl ScannedPdfProcessor {
         }
     }
 
-    fn render_and_preprocess(&self, content: &[u8]) -> Result<Vec<(i32, DynamicImage)>, ProcessingError> {
+    fn render_and_preprocess(
+        &self,
+        content: &[u8],
+    ) -> Result<Vec<(i32, DynamicImage)>, ProcessingError> {
         let doc = self
             .pdfium
             .load_pdf_from_byte_slice(content, None)
@@ -44,14 +47,20 @@ impl ScannedPdfProcessor {
                 .as_image()
                 .as_rgba8()
                 .map(|rgba| DynamicImage::ImageRgba8(rgba.clone()))
-                .ok_or_else(|| ProcessingError(format!("bitmap conversion failed for page {}", i + 1)))?;
+                .ok_or_else(|| {
+                    ProcessingError(format!("bitmap conversion failed for page {}", i + 1))
+                })?;
 
-            let preprocessed = self
-                .pipeline
-                .run(dynamic_image)
-                .map_err(|e| ProcessingError(format!("preprocessing failed for page {}: {}", i + 1, e.0)))?;
+            let preprocessed = self.pipeline.run(dynamic_image).map_err(|e| {
+                ProcessingError(format!("preprocessing failed for page {}: {}", i + 1, e.0))
+            })?;
 
-            println!("  page {} preprocessed: {}x{}", i + 1, preprocessed.width(), preprocessed.height());
+            println!(
+                "  page {} preprocessed: {}x{}",
+                i + 1,
+                preprocessed.width(),
+                preprocessed.height()
+            );
             images.push(((i + 1) as i32, preprocessed));
         }
 
@@ -67,17 +76,17 @@ impl DocumentProcessor for ScannedPdfProcessor {
         let mut pages = Vec::with_capacity(images.len());
 
         for (page_num, preprocessed) in images {
-            let temp_path = std::env::temp_dir().join(format!("scrinium_ocr_{}.png", uuid::Uuid::new_v4()));
+            let temp_path =
+                std::env::temp_dir().join(format!("scrinium_ocr_{}.png", uuid::Uuid::new_v4()));
             preprocessed
                 .save_with_format(&temp_path, ImageFormat::Png)
                 .map_err(|e| ProcessingError(format!("failed to save temp image: {e}")))?;
 
             println!("  running OCR on page {page_num}...");
-            let text = self
-                .ocr
-                .recognize(&temp_path)
-                .await
-                .map_err(|e| ProcessingError(format!("OCR failed for page {page_num}: {}", e.0)))?;
+            let text =
+                self.ocr.recognize(&temp_path).await.map_err(|e| {
+                    ProcessingError(format!("OCR failed for page {page_num}: {}", e.0))
+                })?;
 
             let _ = std::fs::remove_file(&temp_path);
 

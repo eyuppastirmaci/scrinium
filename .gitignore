@@ -1,4 +1,11 @@
 .smoke-logs/
+.env
+processing-service/.env
+
+# Local/private OCR fixtures
+processing-service/fixtures/ocr-quality/private/
+processing-service/fixtures/ocr-quality/external/sroie/images/
+processing-service/fixtures/ocr-quality/external/sroie/ground-truth/
 
 # Build outputs
 target/

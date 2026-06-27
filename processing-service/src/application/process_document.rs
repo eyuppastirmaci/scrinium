@@ -1,8 +1,12 @@
 use crate::adapter::inbound::kafka::contract::DocumentUploaded;
 use crate::adapter::outbound::processing::pdf_detector::{self, PdfType};
-use crate::domain::model::{NewProcessingJob, ProcessingJobStatus, ProcessingResult};
+use crate::domain::model::{
+    ExtractedDocumentMetadata, NewDocumentMetadata, NewProcessingJob, ProcessingJobStatus,
+    ProcessingResult,
+};
 use crate::domain::port::{
-    DocumentProcessor, DocumentStorage, EventPublisher, ProcessingJobRepository,
+    DocumentProcessor, DocumentStorage, EventPublisher, MetadataExtractionInput, MetadataExtractor,
+    MetadataRepository, ProcessingJobRepository,
 };
 use uuid::Uuid;
 
@@ -18,6 +22,8 @@ where
     digital_pdf_processor: Option<Box<dyn DocumentProcessor>>,
     scanned_pdf_processor: Option<Box<dyn DocumentProcessor>>,
     image_processor: Option<Box<dyn DocumentProcessor>>,
+    metadata_repository: Option<&'a dyn MetadataRepository>,
+    metadata_extractor: Option<Box<dyn MetadataExtractor>>,
 }
 
 impl<'a, P, R, S> ProcessDocument<'a, P, R, S>
@@ -34,6 +40,8 @@ where
             digital_pdf_processor: None,
             scanned_pdf_processor: None,
             image_processor: None,
+            metadata_repository: None,
+            metadata_extractor: None,
         }
     }
 
@@ -49,6 +57,16 @@ where
 
     pub fn with_image_processor(mut self, processor: Box<dyn DocumentProcessor>) -> Self {
         self.image_processor = Some(processor);
+        self
+    }
+
+    pub fn with_metadata(
+        mut self,
+        repository: &'a dyn MetadataRepository,
+        extractor: Box<dyn MetadataExtractor>,
+    ) -> Self {
+        self.metadata_repository = Some(repository);
+        self.metadata_extractor = Some(extractor);
         self
     }
 
@@ -122,7 +140,13 @@ where
                     .save_extracted_pages(document_id, &r.pages)
                     .await
                     .map_err(|e| HandleError::Retry(e.0))?;
-                println!("saved {} extracted pages for document {document_id}", r.pages.len());
+                println!(
+                    "saved {} extracted pages for document {document_id}",
+                    r.pages.len()
+                );
+
+                self.store_metadata(document_id, &content, &payload.content_type, Some(&r))
+                    .await?;
 
                 self.repository
                     .mark_completed(document_id)
@@ -137,6 +161,9 @@ where
                 println!("published document.processing.completed for {document_id}");
             }
             Ok(None) => {
+                self.store_metadata(document_id, &content, &payload.content_type, None)
+                    .await?;
+
                 self.repository
                     .mark_completed(document_id)
                     .await
@@ -169,6 +196,64 @@ where
         Ok(())
     }
 
+    async fn store_metadata(
+        &self,
+        document_id: Uuid,
+        content: &[u8],
+        content_type: &str,
+        result: Option<&ProcessingResult>,
+    ) -> Result<(), HandleError> {
+        let (Some(repository), Some(extractor)) =
+            (self.metadata_repository, self.metadata_extractor.as_ref())
+        else {
+            return Ok(());
+        };
+
+        let extracted_text = result.map(extracted_text_for_metadata);
+        let extracted = match extractor
+            .extract(MetadataExtractionInput {
+                content,
+                content_type,
+                extracted_text: extracted_text.as_deref(),
+            })
+            .await
+        {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                eprintln!(
+                    "metadata extraction failed for document {document_id}: {}",
+                    e.0
+                );
+                ExtractedDocumentMetadata::default()
+            }
+        };
+
+        let metadata_json =
+            serde_json::to_string(&extracted.metadata_json).unwrap_or_else(|_| "{}".to_string());
+
+        repository
+            .upsert(NewDocumentMetadata {
+                document_id,
+                page_count: extracted.page_count,
+                pdf_created_at: extracted.pdf_created_at,
+                pdf_modified_at: extracted.pdf_modified_at,
+                pdf_author: extracted.pdf_author,
+                pdf_title: extracted.pdf_title,
+                image_captured_at: extracted.image_captured_at,
+                image_device: extracted.image_device,
+                image_gps_present: extracted.image_gps_present,
+                image_gps_redacted: extracted.image_gps_redacted,
+                detected_language: extracted.detected_language,
+                metadata_json,
+            })
+            .await
+            .map_err(|e| HandleError::Retry(e.0))?;
+
+        println!("saved metadata for document {document_id}");
+
+        Ok(())
+    }
+
     async fn process_content(
         &self,
         content: &[u8],
@@ -188,7 +273,9 @@ where
                     }
                 }
                 PdfType::Scanned => {
-                    println!("document {document_id}: scanned PDF, rendering + preprocessing + OCR");
+                    println!(
+                        "document {document_id}: scanned PDF, rendering + preprocessing + OCR"
+                    );
                     if let Some(processor) = &self.scanned_pdf_processor {
                         let result = processor.process(content).await.map_err(|e| e.0)?;
                         return Ok(Some(result));
@@ -211,6 +298,15 @@ where
 
         Ok(None)
     }
+}
+
+fn extracted_text_for_metadata(result: &ProcessingResult) -> String {
+    result
+        .pages
+        .iter()
+        .map(|page| page.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[derive(Debug)]

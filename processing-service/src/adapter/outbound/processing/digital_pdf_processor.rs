@@ -24,7 +24,10 @@ impl DocumentProcessor for DigitalPdfProcessor {
             text: text.trim().to_string(),
         }];
 
-        println!("digital PDF: {page_count} pages, extracted {} chars", pages[0].text.len());
+        println!(
+            "digital PDF: {page_count} pages, extracted {} chars",
+            pages[0].text.len()
+        );
 
         Ok(ProcessingResult { pages })
     }

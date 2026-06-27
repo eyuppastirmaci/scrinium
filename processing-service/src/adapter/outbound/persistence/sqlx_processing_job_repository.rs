@@ -1,6 +1,4 @@
-use crate::domain::model::{
-    ExtractedPage, NewProcessingJob, ProcessingJob, ProcessingJobStatus,
-};
+use crate::domain::model::{ExtractedPage, NewProcessingJob, ProcessingJob, ProcessingJobStatus};
 use crate::domain::port::{JobStoreError, ProcessingJobRepository};
 use chrono::Utc;
 use sqlx::PgPool;
@@ -150,8 +148,7 @@ struct ProcessingJobRow {
 
 impl ProcessingJobRow {
     fn into_domain(self) -> Result<ProcessingJob, JobStoreError> {
-        let status = ProcessingJobStatus::from_db_str(&self.status)
-            .map_err(JobStoreError)?;
+        let status = ProcessingJobStatus::from_db_str(&self.status).map_err(JobStoreError)?;
         Ok(ProcessingJob {
             document_id: self.document_id,
             status,

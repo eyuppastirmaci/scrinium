@@ -1,3 +1,5 @@
+mod sqlx_metadata_repository;
 mod sqlx_processing_job_repository;
 
+pub use sqlx_metadata_repository::SqlxMetadataRepository;
 pub use sqlx_processing_job_repository::SqlxProcessingJobRepository;

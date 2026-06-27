@@ -2,6 +2,7 @@
 name = "processing-service"
 version = "0.1.0"
 edition = "2024"
+default-run = "processing-service"
 
 [dependencies]
 rdkafka = { version = "0.39", features = ["cmake-build", "tokio"] }
@@ -9,9 +10,12 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-r
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.9"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 async-trait = "0.1"
+axum = "0.8"
+dotenvy = "0.15"
 aws-sdk-s3 = "1"
 aws-config = { version = "1", features = ["behavior-version-latest"] }
 pdf-extract = "0.7"
@@ -19,3 +23,5 @@ lopdf = "0.36"
 pdfium-render = { version = "0.8", features = ["image", "sync", "thread_safe"] }
 image = "0.25"
 imageproc = "0.25"
+kamadak-exif = "0.6"
+whatlang = "0.16"

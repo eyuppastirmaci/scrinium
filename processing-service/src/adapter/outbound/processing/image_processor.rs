@@ -28,9 +28,14 @@ impl DocumentProcessor for ImageProcessor {
             .run(img)
             .map_err(|e| ProcessingError(format!("preprocessing failed: {}", e.0)))?;
 
-        println!("  image preprocessed: {}x{}", preprocessed.width(), preprocessed.height());
+        println!(
+            "  image preprocessed: {}x{}",
+            preprocessed.width(),
+            preprocessed.height()
+        );
 
-        let temp_path = std::env::temp_dir().join(format!("scrinium_ocr_{}.png", uuid::Uuid::new_v4()));
+        let temp_path =
+            std::env::temp_dir().join(format!("scrinium_ocr_{}.png", uuid::Uuid::new_v4()));
         preprocessed
             .save_with_format(&temp_path, ImageFormat::Png)
             .map_err(|e| ProcessingError(format!("failed to save temp image: {e}")))?;

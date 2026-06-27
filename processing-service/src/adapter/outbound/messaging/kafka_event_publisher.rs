@@ -19,7 +19,13 @@ impl KafkaEventPublisher {
         Self { producer }
     }
 
-    async fn publish(&self, topic: &str, document_id: &str, event_type: &str, payload_json: &str) -> Result<(), PublishError> {
+    async fn publish(
+        &self,
+        topic: &str,
+        document_id: &str,
+        event_type: &str,
+        payload_json: &str,
+    ) -> Result<(), PublishError> {
         let json = serde_json::to_string(&serde_json::json!({
             "id": Uuid::new_v4().to_string(),
             "type": event_type,

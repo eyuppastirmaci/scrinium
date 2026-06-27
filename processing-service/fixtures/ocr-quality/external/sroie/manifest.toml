@@ -1,0 +1,68 @@
+# Small SROIE subset used to validate the OCR quality measurement harness.
+# These samples are primarily English/digit receipts, not Scrinium's Turkish golden set.
+
+source_name = "ICDAR 2019 SROIE GitHub mirror"
+source_url = "https://github.com/zzzDavid/ICDAR-2019-SROIE"
+official_url = "https://rrc.cvc.uab.es/?ch=13"
+language = "eng"
+
+[[fixtures]]
+id = "sroie_000"
+kind = "receipt"
+input = "images/000.jpg"
+ground_truth = "ground-truth/000.txt"
+
+[[fixtures]]
+id = "sroie_001"
+kind = "receipt"
+input = "images/001.jpg"
+ground_truth = "ground-truth/001.txt"
+
+[[fixtures]]
+id = "sroie_002"
+kind = "receipt"
+input = "images/002.jpg"
+ground_truth = "ground-truth/002.txt"
+
+[[fixtures]]
+id = "sroie_003"
+kind = "receipt"
+input = "images/003.jpg"
+ground_truth = "ground-truth/003.txt"
+
+[[fixtures]]
+id = "sroie_004"
+kind = "receipt"
+input = "images/004.jpg"
+ground_truth = "ground-truth/004.txt"
+
+[[fixtures]]
+id = "sroie_005"
+kind = "receipt"
+input = "images/005.jpg"
+ground_truth = "ground-truth/005.txt"
+
+[[fixtures]]
+id = "sroie_006"
+kind = "receipt"
+input = "images/006.jpg"
+ground_truth = "ground-truth/006.txt"
+
+[[fixtures]]
+id = "sroie_007"
+kind = "receipt"
+input = "images/007.jpg"
+ground_truth = "ground-truth/007.txt"
+
+[[fixtures]]
+id = "sroie_008"
+kind = "receipt"
+input = "images/008.jpg"
+ground_truth = "ground-truth/008.txt"
+
+[[fixtures]]
+id = "sroie_009"
+kind = "receipt"
+input = "images/009.jpg"
+ground_truth = "ground-truth/009.txt"
+
