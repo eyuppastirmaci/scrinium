@@ -7,6 +7,7 @@
 #   Kafka            localhost:9092
 #   Postgres (doc)   localhost:5432   (db: document)
 #   Postgres (proc)  localhost:5433   (db: processing)
+#   Postgres (search) localhost:5434  (db: search)
 #   Redis            localhost:6379
 #   MinIO API        localhost:9000
 #   MinIO Console    localhost:9001   (minioadmin / minioadmin)
@@ -94,6 +95,27 @@ services:
     networks:
       - scrinium
 
+  # PostgreSQL 16 — search-service database (host port 5434).
+  postgres-search:
+    image: postgres:16
+    container_name: scrinium-postgres-search
+    profiles: ["infra"]
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: scrinium
+      POSTGRES_PASSWORD: scrinium
+      POSTGRES_DB: search
+    volumes:
+      - pg-search-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scrinium -d search"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scrinium
+
   # Redis 7 — live job status, cache, and rate-limit store.
   redis:
     image: redis:7
@@ -155,6 +177,7 @@ volumes:
   kafka-data:
   pg-document-data:
   pg-processing-data:
+  pg-search-data:
   redis-data:
   minio-data:
 

@@ -1,4 +1,4 @@
-use crate::domain::model::{ExtractedPage, NewProcessingJob, ProcessingJob, ProcessingJobStatus};
+use crate::domain::model::{NewProcessingJob, ProcessingJob, ProcessingJobStatus};
 use crate::domain::port::{JobStoreError, ProcessingJobRepository};
 use chrono::Utc;
 use sqlx::PgPool;
@@ -89,79 +89,6 @@ impl ProcessingJobRepository for SqlxProcessingJobRepository {
         .map_err(|e| JobStoreError(format!("mark_failed: {e}")))
     }
 
-    async fn save_extracted_pages(
-        &self,
-        document_id: Uuid,
-        pages: &[ExtractedPage],
-    ) -> Result<(), JobStoreError> {
-        if pages.is_empty() {
-            return Ok(());
-        }
-
-        sqlx::query("DELETE FROM extracted_pages WHERE document_id = $1")
-            .bind(document_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| JobStoreError(format!("delete old pages: {e}")))?;
-
-        let mut doc_ids: Vec<Uuid> = Vec::with_capacity(pages.len());
-        let mut page_numbers: Vec<i32> = Vec::with_capacity(pages.len());
-        let mut texts: Vec<&str> = Vec::with_capacity(pages.len());
-
-        for page in pages {
-            doc_ids.push(document_id);
-            page_numbers.push(page.page_number);
-            texts.push(&page.text);
-        }
-
-        sqlx::query(
-            "INSERT INTO extracted_pages (document_id, page_number, extracted_text)
-             SELECT * FROM UNNEST($1::uuid[], $2::int[], $3::text[])",
-        )
-        .bind(&doc_ids)
-        .bind(&page_numbers)
-        .bind(&texts)
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| JobStoreError(format!("save_extracted_pages: {e}")))
-    }
-
-    async fn find_extracted_pages(
-        &self,
-        document_id: Uuid,
-    ) -> Result<Vec<ExtractedPage>, JobStoreError> {
-        let rows = sqlx::query_as::<_, ExtractedPageRow>(
-            "SELECT page_number, extracted_text
-             FROM extracted_pages
-             WHERE document_id = $1
-             ORDER BY page_number ASC",
-        )
-        .bind(document_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| JobStoreError(format!("find_extracted_pages: {e}")))?;
-
-        Ok(rows
-            .into_iter()
-            .map(ExtractedPageRow::into_domain)
-            .collect())
-    }
-}
-
-#[derive(sqlx::FromRow)]
-struct ExtractedPageRow {
-    page_number: i32,
-    extracted_text: String,
-}
-
-impl ExtractedPageRow {
-    fn into_domain(self) -> ExtractedPage {
-        ExtractedPage {
-            page_number: self.page_number,
-            text: self.extracted_text,
-        }
-    }
 }
 
 #[derive(sqlx::FromRow)]

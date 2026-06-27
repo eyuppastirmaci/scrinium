@@ -1,0 +1,20 @@
+[project]
+name = "scrinium-search-service"
+version = "0.1.0"
+description = "Full-text search service for Scrinium document archive"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "asyncpg>=0.30",
+    "aiokafka>=0.12",
+    "pydantic-settings>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.9",
+    "pytest>=8",
+    "pytest-asyncio>=0.25",
+    "httpx>=0.28",
+]

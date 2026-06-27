@@ -9,27 +9,11 @@ spring:
       server:
         webflux:
           routes:
-            # Route document metadata reads to processing-service.
-            - id: processing-service-metadata
-              uri: http://localhost:8091
+            # Route search requests to search-service.
+            - id: search-service
+              uri: http://localhost:8092
               predicates:
-                - Path=/api/documents/*/metadata
-              filters:
-                - StripPrefix=1
-
-            # Route thumbnail reads to processing-service.
-            - id: processing-service-thumbnail
-              uri: http://localhost:8091
-              predicates:
-                - Path=/api/documents/*/thumbnail
-              filters:
-                - StripPrefix=1
-
-            # Route extracted text reads to processing-service.
-            - id: processing-service-text
-              uri: http://localhost:8091
-              predicates:
-                - Path=/api/documents/*/text
+                - Path=/api/search
               filters:
                 - StripPrefix=1
 

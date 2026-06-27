@@ -1,13 +1,12 @@
 use crate::adapter::inbound::kafka::contract::DocumentUploaded;
 use crate::adapter::outbound::processing::pdf_detector::{self, PdfType};
 use crate::domain::model::{
-    ExtractedDocumentMetadata, NewDocumentMetadata, NewProcessingJob, ProcessingJobStatus,
-    ProcessingResult,
+    ExtractedDocumentMetadata, NewProcessingJob, ProcessingCompletedEvent, ProcessingJobStatus,
+    ProcessingResult, ThumbnailInfo, ThumbnailSize,
 };
-use crate::domain::model::ThumbnailSize;
 use crate::domain::port::{
     DocumentProcessor, DocumentStorage, EventPublisher, MetadataExtractionInput, MetadataExtractor,
-    MetadataRepository, ProcessingJobRepository, ThumbnailGenerator, ThumbnailRepository,
+    ProcessingJobRepository, ThumbnailGenerator,
 };
 use uuid::Uuid;
 
@@ -23,10 +22,8 @@ where
     digital_pdf_processor: Option<Box<dyn DocumentProcessor>>,
     scanned_pdf_processor: Option<Box<dyn DocumentProcessor>>,
     image_processor: Option<Box<dyn DocumentProcessor>>,
-    metadata_repository: Option<&'a dyn MetadataRepository>,
     metadata_extractor: Option<Box<dyn MetadataExtractor>>,
     thumbnail_generator: Option<Box<dyn ThumbnailGenerator>>,
-    thumbnail_repository: Option<&'a dyn ThumbnailRepository>,
 }
 
 impl<'a, P, R, S> ProcessDocument<'a, P, R, S>
@@ -43,10 +40,8 @@ where
             digital_pdf_processor: None,
             scanned_pdf_processor: None,
             image_processor: None,
-            metadata_repository: None,
             metadata_extractor: None,
             thumbnail_generator: None,
-            thumbnail_repository: None,
         }
     }
 
@@ -65,23 +60,13 @@ where
         self
     }
 
-    pub fn with_metadata(
-        mut self,
-        repository: &'a dyn MetadataRepository,
-        extractor: Box<dyn MetadataExtractor>,
-    ) -> Self {
-        self.metadata_repository = Some(repository);
+    pub fn with_metadata_extractor(mut self, extractor: Box<dyn MetadataExtractor>) -> Self {
         self.metadata_extractor = Some(extractor);
         self
     }
 
-    pub fn with_thumbnail_generator(
-        mut self,
-        generator: Box<dyn ThumbnailGenerator>,
-        repository: &'a dyn ThumbnailRepository,
-    ) -> Self {
+    pub fn with_thumbnail_generator(mut self, generator: Box<dyn ThumbnailGenerator>) -> Self {
         self.thumbnail_generator = Some(generator);
-        self.thumbnail_repository = Some(repository);
         self
     }
 
@@ -143,27 +128,21 @@ where
             .await;
 
         match result {
-            Ok(Some(r)) => {
-                let total_chars: usize = r.pages.iter().map(|p| p.text.len()).sum();
+            Ok(pages) => {
+                let pages = pages.map(|r| r.pages).unwrap_or_default();
+                let total_chars: usize = pages.iter().map(|p| p.text.len()).sum();
                 println!(
                     "processed {} pages, {} chars for document {document_id}",
-                    r.pages.len(),
+                    pages.len(),
                     total_chars
                 );
 
-                self.repository
-                    .save_extracted_pages(document_id, &r.pages)
-                    .await
-                    .map_err(|e| HandleError::Retry(e.0))?;
-                println!(
-                    "saved {} extracted pages for document {document_id}",
-                    r.pages.len()
-                );
+                let metadata = self
+                    .extract_metadata(document_id, &content, &payload.content_type, &pages)
+                    .await;
 
-                self.store_metadata(document_id, &content, &payload.content_type, Some(&r))
-                    .await?;
-
-                self.generate_thumbnails(document_id, &content, &payload.content_type)
+                let thumbnails = self
+                    .generate_thumbnails(document_id, &content, &payload.content_type)
                     .await;
 
                 self.repository
@@ -171,31 +150,20 @@ where
                     .await
                     .map_err(|e| HandleError::Retry(e.0))?;
 
+                let event = ProcessingCompletedEvent {
+                    document_id,
+                    file_name: payload.file_name.clone(),
+                    pages,
+                    metadata,
+                    thumbnails,
+                };
+
                 self.publisher
-                    .processing_completed(&document_id.to_string())
+                    .processing_completed(&event)
                     .await
                     .map_err(|e| HandleError::Retry(e.0))?;
 
                 println!("published document.processing.completed for {document_id}");
-            }
-            Ok(None) => {
-                self.store_metadata(document_id, &content, &payload.content_type, None)
-                    .await?;
-
-                self.generate_thumbnails(document_id, &content, &payload.content_type)
-                    .await;
-
-                self.repository
-                    .mark_completed(document_id)
-                    .await
-                    .map_err(|e| HandleError::Retry(e.0))?;
-
-                self.publisher
-                    .processing_completed(&document_id.to_string())
-                    .await
-                    .map_err(|e| HandleError::Retry(e.0))?;
-
-                println!("no extraction performed, marked completed for document {document_id}");
             }
             Err(reason) => {
                 eprintln!("processing failed for document {document_id}: {reason}");
@@ -217,21 +185,30 @@ where
         Ok(())
     }
 
-    async fn store_metadata(
+    async fn extract_metadata(
         &self,
         document_id: Uuid,
         content: &[u8],
         content_type: &str,
-        result: Option<&ProcessingResult>,
-    ) -> Result<(), HandleError> {
-        let (Some(repository), Some(extractor)) =
-            (self.metadata_repository, self.metadata_extractor.as_ref())
-        else {
-            return Ok(());
+        pages: &[crate::domain::model::ExtractedPage],
+    ) -> ExtractedDocumentMetadata {
+        let Some(extractor) = self.metadata_extractor.as_ref() else {
+            return ExtractedDocumentMetadata::default();
         };
 
-        let extracted_text = result.map(extracted_text_for_metadata);
-        let extracted = match extractor
+        let extracted_text = if pages.is_empty() {
+            None
+        } else {
+            Some(
+                pages
+                    .iter()
+                    .map(|p| p.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+        };
+
+        match extractor
             .extract(MetadataExtractionInput {
                 content,
                 content_type,
@@ -239,7 +216,10 @@ where
             })
             .await
         {
-            Ok(metadata) => metadata,
+            Ok(metadata) => {
+                println!("extracted metadata for document {document_id}");
+                metadata
+            }
             Err(e) => {
                 eprintln!(
                     "metadata extraction failed for document {document_id}: {}",
@@ -247,32 +227,7 @@ where
                 );
                 ExtractedDocumentMetadata::default()
             }
-        };
-
-        let metadata_json =
-            serde_json::to_string(&extracted.metadata_json).unwrap_or_else(|_| "{}".to_string());
-
-        repository
-            .upsert(NewDocumentMetadata {
-                document_id,
-                page_count: extracted.page_count,
-                pdf_created_at: extracted.pdf_created_at,
-                pdf_modified_at: extracted.pdf_modified_at,
-                pdf_author: extracted.pdf_author,
-                pdf_title: extracted.pdf_title,
-                image_captured_at: extracted.image_captured_at,
-                image_device: extracted.image_device,
-                image_gps_present: extracted.image_gps_present,
-                image_gps_redacted: extracted.image_gps_redacted,
-                detected_language: extracted.detected_language,
-                metadata_json,
-            })
-            .await
-            .map_err(|e| HandleError::Retry(e.0))?;
-
-        println!("saved metadata for document {document_id}");
-
-        Ok(())
+        }
     }
 
     async fn generate_thumbnails(
@@ -280,10 +235,12 @@ where
         document_id: Uuid,
         content: &[u8],
         content_type: &str,
-    ) {
+    ) -> Vec<ThumbnailInfo> {
         let Some(generator) = &self.thumbnail_generator else {
-            return;
+            return Vec::new();
         };
+
+        let mut thumbnails = Vec::new();
 
         for &size in ThumbnailSize::all() {
             match generator.generate(content, content_type, size) {
@@ -296,22 +253,16 @@ where
                         );
                         continue;
                     }
-                    if let Some(repo) = self.thumbnail_repository {
-                        if let Err(e) = repo
-                            .upsert(document_id, size, &key, thumb.width as i32, thumb.height as i32)
-                            .await
-                        {
-                            eprintln!(
-                                "failed to persist {} thumbnail record for document {document_id}: {}",
-                                size.suffix(), e.0
-                            );
-                            continue;
-                        }
-                    }
                     println!(
                         "saved {} thumbnail for document {document_id} ({}x{}, {} bytes)",
                         size.suffix(), thumb.width, thumb.height, thumb.bytes.len()
                     );
+                    thumbnails.push(ThumbnailInfo {
+                        size,
+                        storage_key: key,
+                        width: thumb.width,
+                        height: thumb.height,
+                    });
                 }
                 Err(e) => eprintln!(
                     "failed to generate {} thumbnail for document {document_id}: {}",
@@ -319,6 +270,8 @@ where
                 ),
             }
         }
+
+        thumbnails
     }
 
     async fn process_content(
@@ -365,15 +318,6 @@ where
 
         Ok(None)
     }
-}
-
-fn extracted_text_for_metadata(result: &ProcessingResult) -> String {
-    result
-        .pages
-        .iter()
-        .map(|page| page.text.as_str())
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 #[derive(Debug)]

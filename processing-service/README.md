@@ -65,7 +65,6 @@ ignored by Git. The checked-in `.env.example` documents the supported variables:
 - `PROCESSING_TESSERACT_PATH`
 - `PROCESSING_TESSERACT_LANGUAGES`
 - `PROCESSING_PDFIUM_PATH`
-- `PROCESSING_HTTP_ADDR`
 
 If Tesseract is available on `PATH`, leave `PROCESSING_TESSERACT_PATH=tesseract`.
 Otherwise set it to the local executable path.

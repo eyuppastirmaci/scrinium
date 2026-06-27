@@ -1,6 +1,7 @@
 .smoke-logs/
 .env
 processing-service/.env
+search-service/.env
 
 # Local/private OCR fixtures
 processing-service/fixtures/ocr-quality/private/
@@ -16,6 +17,11 @@ processing-service/target/
 node_modules/
 dist/
 *.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
 
 # IDE and OS noise
 .idea/

@@ -12,7 +12,6 @@ const DEFAULT_STORAGE_BUCKET: &str = "documents";
 const DEFAULT_TESSERACT_PATH: &str = "tesseract";
 const DEFAULT_TESSERACT_LANGUAGES: &str = "tur+eng";
 const DEFAULT_PDFIUM_PATH: &str = "./";
-const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:8091";
 
 pub struct AppConfig {
     pub kafka_brokers: String,
@@ -27,7 +26,6 @@ pub struct AppConfig {
     pub tesseract_path: String,
     pub tesseract_languages: String,
     pub pdfium_path: String,
-    pub http_addr: String,
 }
 
 impl AppConfig {
@@ -64,8 +62,6 @@ impl AppConfig {
                 .unwrap_or_else(|_| DEFAULT_TESSERACT_LANGUAGES.to_string()),
             pdfium_path: env::var("PROCESSING_PDFIUM_PATH")
                 .unwrap_or_else(|_| DEFAULT_PDFIUM_PATH.to_string()),
-            http_addr: env::var("PROCESSING_HTTP_ADDR")
-                .unwrap_or_else(|_| DEFAULT_HTTP_ADDR.to_string()),
         }
     }
 }

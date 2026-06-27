@@ -1,3 +1,4 @@
+use crate::domain::model::ProcessingCompletedEvent;
 use crate::domain::port::{EventPublisher, PublishError};
 use chrono::Utc;
 use rdkafka::config::ClientConfig;
@@ -46,15 +47,54 @@ impl KafkaEventPublisher {
 
 #[async_trait::async_trait]
 impl EventPublisher for KafkaEventPublisher {
-    async fn processing_completed(&self, document_id: &str) -> Result<(), PublishError> {
+    async fn processing_completed(&self, event: &ProcessingCompletedEvent) -> Result<(), PublishError> {
+        let document_id = event.document_id.to_string();
+        let pages: Vec<CompletedPagePayload> = event
+            .pages
+            .iter()
+            .map(|p| CompletedPagePayload {
+                page_number: p.page_number,
+                text: p.text.clone(),
+            })
+            .collect();
+
+        let thumbnails: Vec<CompletedThumbnailPayload> = event
+            .thumbnails
+            .iter()
+            .map(|t| CompletedThumbnailPayload {
+                size: t.size.suffix().to_uppercase(),
+                storage_key: t.storage_key.clone(),
+                width: t.width,
+                height: t.height,
+            })
+            .collect();
+
+        let metadata = &event.metadata;
+        let metadata_payload = CompletedMetadataPayload {
+            page_count: metadata.page_count,
+            pdf_created_at: metadata.pdf_created_at.map(|d| d.to_rfc3339()),
+            pdf_modified_at: metadata.pdf_modified_at.map(|d| d.to_rfc3339()),
+            pdf_author: metadata.pdf_author.clone(),
+            pdf_title: metadata.pdf_title.clone(),
+            image_captured_at: metadata.image_captured_at.map(|d| d.to_rfc3339()),
+            image_device: metadata.image_device.clone(),
+            image_gps_present: metadata.image_gps_present,
+            image_gps_redacted: metadata.image_gps_redacted,
+            detected_language: metadata.detected_language.clone(),
+        };
+
         let payload = serde_json::to_string(&CompletedPayload {
-            document_id: document_id.to_string(),
+            document_id: document_id.clone(),
+            file_name: event.file_name.clone(),
+            pages,
+            metadata: metadata_payload,
+            thumbnails,
         })
         .map_err(|e| PublishError(format!("serialize failed: {e}")))?;
 
         self.publish(
             "document.processing.completed",
-            document_id,
+            &document_id,
             "document.processing.completed",
             &payload,
         )
@@ -82,6 +122,41 @@ impl EventPublisher for KafkaEventPublisher {
 #[serde(rename_all = "camelCase")]
 struct CompletedPayload {
     document_id: String,
+    file_name: String,
+    pages: Vec<CompletedPagePayload>,
+    metadata: CompletedMetadataPayload,
+    thumbnails: Vec<CompletedThumbnailPayload>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompletedPagePayload {
+    page_number: i32,
+    text: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompletedMetadataPayload {
+    page_count: Option<i32>,
+    pdf_created_at: Option<String>,
+    pdf_modified_at: Option<String>,
+    pdf_author: Option<String>,
+    pdf_title: Option<String>,
+    image_captured_at: Option<String>,
+    image_device: Option<String>,
+    image_gps_present: bool,
+    image_gps_redacted: bool,
+    detected_language: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompletedThumbnailPayload {
+    size: String,
+    storage_key: String,
+    width: u32,
+    height: u32,
 }
 
 #[derive(Serialize)]

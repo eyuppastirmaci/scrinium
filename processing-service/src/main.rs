@@ -1,10 +1,7 @@
 use pdfium_render::prelude::*;
-use processing_service::adapter::inbound::http;
 use processing_service::adapter::inbound::kafka::build_consumer;
 use processing_service::adapter::outbound::messaging::KafkaEventPublisher;
-use processing_service::adapter::outbound::persistence::{
-    SqlxMetadataRepository, SqlxProcessingJobRepository, SqlxThumbnailRepository,
-};
+use processing_service::adapter::outbound::persistence::SqlxProcessingJobRepository;
 use processing_service::adapter::outbound::processing::digital_pdf_processor::DigitalPdfProcessor;
 use processing_service::adapter::outbound::processing::image_processor::ImageProcessor;
 use processing_service::adapter::outbound::processing::metadata::{
@@ -24,7 +21,6 @@ use processing_service::domain;
 use rdkafka::consumer::{CommitMode, Consumer};
 use rdkafka::message::Message;
 use sqlx::postgres::PgPoolOptions;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 fn build_preprocessing_pipeline() -> PreprocessingPipeline {
@@ -108,14 +104,7 @@ async fn main() {
     );
 
     let publisher = KafkaEventPublisher::new(&config.kafka_brokers);
-    let repository = SqlxProcessingJobRepository::new(db_pool.clone());
-    let metadata_repository = SqlxMetadataRepository::new(db_pool.clone());
-    let http_processing_repository = Arc::new(SqlxProcessingJobRepository::new(db_pool.clone()));
-    let http_metadata_repository = Arc::new(SqlxMetadataRepository::new(db_pool.clone()));
-    let thumbnail_repository = SqlxThumbnailRepository::new(db_pool.clone());
-    let http_thumbnail_repository = Arc::new(SqlxThumbnailRepository::new(db_pool));
-    let http_storage: Arc<dyn domain::port::DocumentStorage> =
-        Arc::new(S3DocumentStorage::new(s3_client.clone(), config.storage_bucket.clone()));
+    let repository = SqlxProcessingJobRepository::new(db_pool);
     let storage = S3DocumentStorage::new(s3_client, config.storage_bucket);
     let metadata_extractor = CompositeMetadataExtractor::new(vec![
         Box::new(PdfMetadataExtractor::new()),
@@ -126,32 +115,12 @@ async fn main() {
     let mut use_case = ProcessDocument::new(&publisher, &repository, &storage)
         .with_digital_pdf_processor(Box::new(digital_pdf_processor))
         .with_image_processor(Box::new(image_processor))
-        .with_metadata(&metadata_repository, Box::new(metadata_extractor))
-        .with_thumbnail_generator(Box::new(thumbnail_generator), &thumbnail_repository);
+        .with_metadata_extractor(Box::new(metadata_extractor))
+        .with_thumbnail_generator(Box::new(thumbnail_generator));
 
     if let Some(processor) = scanned_pdf_processor {
         use_case = use_case.with_scanned_pdf_processor(Box::new(processor));
     }
-
-    let http_addr: SocketAddr = config
-        .http_addr
-        .parse()
-        .expect("PROCESSING_HTTP_ADDR must be a socket address");
-    tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind(http_addr)
-            .await
-            .expect("processing-service HTTP bind failed");
-        println!("processing-service HTTP listening on http://{http_addr}");
-
-        if let Err(e) = axum::serve(
-            listener,
-            http::router(http_metadata_repository, http_processing_repository, http_thumbnail_repository, http_storage).into_make_service(),
-        )
-        .await
-        {
-            eprintln!("processing-service HTTP server failed: {e}");
-        }
-    });
 
     let consumer = build_consumer(&config.kafka_brokers, &config.kafka_group_id);
     consumer
