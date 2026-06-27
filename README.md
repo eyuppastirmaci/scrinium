@@ -219,3 +219,4 @@ High-level direction only; design to be detailed when this phase begins.
 - Document retention policies
 - Export and backup
 - Webhook integrations
+- Fully containerized services
