@@ -121,7 +121,7 @@ fn encode_thumbnail(
 ) -> Result<GeneratedThumbnail, ThumbnailError> {
     let max_width = size.max_width();
     let resized = if img.width() > max_width {
-        img.resize(max_width, u32::MAX, FilterType::Lanczos3)
+        img.resize(max_width, u32::MAX, FilterType::Triangle)
     } else {
         img
     };

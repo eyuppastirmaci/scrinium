@@ -12,23 +12,28 @@ impl DigitalPdfProcessor {
 #[async_trait::async_trait]
 impl DocumentProcessor for DigitalPdfProcessor {
     async fn process(&self, content: &[u8]) -> Result<ProcessingResult, ProcessingError> {
-        let text = pdf_extract::extract_text_from_mem(content)
-            .map_err(|e| ProcessingError(format!("PDF text extraction failed: {e}")))?;
+        let content = content.to_vec();
+        tokio::task::spawn_blocking(move || {
+            let text = pdf_extract::extract_text_from_mem(&content)
+                .map_err(|e| ProcessingError(format!("PDF text extraction failed: {e}")))?;
 
-        let page_count = lopdf::Document::load_mem(content)
-            .map(|doc| doc.get_pages().len() as i32)
-            .unwrap_or(1);
+            let page_count = lopdf::Document::load_mem(&content)
+                .map(|doc| doc.get_pages().len() as i32)
+                .unwrap_or(1);
 
-        let pages = vec![ExtractedPage {
-            page_number: 1,
-            text: text.trim().to_string(),
-        }];
+            let pages = vec![ExtractedPage {
+                page_number: 1,
+                text: text.trim().to_string(),
+            }];
 
-        println!(
-            "digital PDF: {page_count} pages, extracted {} chars",
-            pages[0].text.len()
-        );
+            println!(
+                "digital PDF: {page_count} pages, extracted {} chars",
+                pages[0].text.len()
+            );
 
-        Ok(ProcessingResult { pages })
+            Ok(ProcessingResult { pages })
+        })
+        .await
+        .unwrap_or_else(|e| Err(ProcessingError(format!("PDF extraction panicked: {e}"))))
     }
 }

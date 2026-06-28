@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { FileText, Image } from '@lucide/vue'
 import StatusBadge from '../../components/StatusBadge.vue'
 import ProcessingIndicator from '../../components/ProcessingIndicator.vue'
@@ -12,6 +12,9 @@ const props = defineProps<{ document: DocumentSummary }>()
 const { processingStatus, completedIds, failedIds } = useProcessingStatus()
 
 const thumbFailed = ref(false)
+const thumbLoaded = ref(false)
+const thumbVersion = ref(0)
+let thumbRetries = 0
 
 function isImage(contentType: string): boolean {
   return contentType.startsWith('image/')
@@ -22,6 +25,35 @@ const effectiveStatus = computed(() => {
   if (failedIds.has(props.document.id)) return 'FAILED' as const
   return props.document.status
 })
+
+watch(effectiveStatus, (status) => {
+  if (status === 'READY') {
+    thumbFailed.value = false
+    thumbLoaded.value = false
+    thumbRetries = 0
+    thumbVersion.value = Date.now()
+  }
+})
+
+const thumbnailUrl = computed(() => {
+  const base = getThumbnailUrl(props.document.id, 'small')
+  return thumbVersion.value ? `${base}&v=${thumbVersion.value}` : base
+})
+
+function onThumbLoad() {
+  thumbLoaded.value = true
+}
+
+function onThumbError() {
+  if (completedIds.has(props.document.id) && thumbRetries < 3) {
+    thumbRetries++
+    setTimeout(() => { thumbVersion.value = Date.now() }, 1000 * thumbRetries)
+  } else {
+    thumbFailed.value = true
+  }
+}
+
+const showSkeleton = computed(() => showThumbnail.value && !thumbFailed.value && !thumbLoaded.value)
 
 const progress = computed(() => processingStatus[props.document.id])
 const showThumbnail = computed(() => effectiveStatus.value === 'READY' && !progress.value)
@@ -40,15 +72,19 @@ const showIndicator = computed(() => effectiveStatus.value === 'PENDING' || !!pr
         :progress="progress"
         :size="24"
       />
-      <img
-        v-else-if="showThumbnail && !thumbFailed"
-        :src="getThumbnailUrl(document.id, 'small')"
-        alt=""
-        class="row__thumb"
-        @error="thumbFailed = true"
-      />
+      <div v-else-if="showThumbnail && !thumbFailed" class="row__thumb-wrap">
+        <div v-if="showSkeleton" class="row__skeleton" />
+        <img
+          :src="thumbnailUrl"
+          alt=""
+          class="row__thumb"
+          :class="{ 'row__thumb--loaded': thumbLoaded }"
+          @load="onThumbLoad"
+          @error="onThumbError"
+        />
+      </div>
       <component
-        v-else
+        v-else-if="!showIndicator"
         :is="isImage(document.contentType) ? Image : FileText"
         :size="16" :stroke-width="1.5"
         class="row__icon"
@@ -87,6 +123,34 @@ const showIndicator = computed(() => effectiveStatus.value === 'PENDING' || !!pr
   min-width: 0;
 }
 
+.row__thumb-wrap {
+  width: 24px;
+  height: 24px;
+  position: relative;
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.row__skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-elevated) 25%,
+    var(--color-border-subtle) 50%,
+    var(--color-bg-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 3px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .row__thumb {
   width: 24px;
   height: 24px;
@@ -94,6 +158,12 @@ const showIndicator = computed(() => effectiveStatus.value === 'PENDING' || !!pr
   border-radius: 3px;
   border: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.row__thumb--loaded {
+  opacity: 1;
 }
 
 .row__icon {

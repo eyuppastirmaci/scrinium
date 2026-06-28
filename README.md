@@ -6,6 +6,8 @@ makes everything searchable. Upload PDFs and images through the web UI, watch
 processing happen in real time, then browse, search, and preview your documents
 from anywhere.
 
+![Scrinium Demo](.github/assets/scrinium-demo.gif)
+
 ## Services
 
 This is a monorepo containing five components:

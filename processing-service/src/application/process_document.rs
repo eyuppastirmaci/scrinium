@@ -265,10 +265,25 @@ impl ProcessDocument {
             return Vec::new();
         };
 
-        let mut thumbnails = Vec::new();
+        let content = content.to_vec();
+        let content_type = content_type.to_string();
+        let generator = Arc::clone(generator);
 
-        for &size in ThumbnailSize::all() {
-            match generator.generate(content, content_type, size) {
+        let results = tokio::task::spawn_blocking(move || {
+            ThumbnailSize::all()
+                .iter()
+                .map(|&size| (size, generator.generate(&content, &content_type, size)))
+                .collect::<Vec<_>>()
+        })
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("thumbnail generation panicked for {document_id}: {e}");
+            Vec::new()
+        });
+
+        let mut thumbnails = Vec::new();
+        for (size, result) in results {
+            match result {
                 Ok(thumb) => {
                     let key = ThumbnailSize::storage_key(document_id, size);
                     if let Err(e) = self.storage.write_object(&key, &thumb.bytes, "image/jpeg").await {

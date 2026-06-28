@@ -1,24 +1,40 @@
 use crate::domain::port::{ProgressError, ProgressReporter};
 use redis::AsyncCommands;
+use redis::aio::MultiplexedConnection;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 pub struct RedisProgressReporter {
     client: redis::Client,
+    conn: Mutex<Option<MultiplexedConnection>>,
 }
 
 impl RedisProgressReporter {
     pub fn new(redis_url: &str) -> Result<Self, ProgressError> {
         let client = redis::Client::open(redis_url)
             .map_err(|e| ProgressError(format!("redis connection failed: {e}")))?;
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            conn: Mutex::new(None),
+        })
+    }
+
+    async fn get_conn(&self) -> Result<MultiplexedConnection, ProgressError> {
+        let mut guard = self.conn.lock().await;
+        if let Some(conn) = guard.as_ref() {
+            return Ok(conn.clone());
+        }
+        let conn = self.client.get_multiplexed_async_connection().await
+            .map_err(|e| ProgressError(format!("redis connect: {e}")))?;
+        *guard = Some(conn.clone());
+        Ok(conn)
     }
 }
 
 #[async_trait::async_trait]
 impl ProgressReporter for RedisProgressReporter {
     async fn report(&self, document_id: Uuid, step: &str, progress: i32) -> Result<(), ProgressError> {
-        let mut conn = self.client.get_multiplexed_async_connection().await
-            .map_err(|e| ProgressError(format!("redis connect: {e}")))?;
+        let mut conn = self.get_conn().await?;
 
         let key = format!("doc:progress:{document_id}");
         let channel = "doc:progress";
